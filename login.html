@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head><title>Session Login</title></head>
+<body>
+    <h1>Session Login</h1>
+
+    <h2>Create a Session</h2>
+    <form method="POST">
+        <input type="hidden" name="action" value="create">
+        Password: <input type="password" name="password" required>
+        <button type="submit">Create Session</button>
+    </form>
+
+    <h2>Join a Session</h2>
+    <form method="POST">
+        <input type="hidden" name="action" value="join">
+        Session ID: <input type="text" name="session_id" required><br>
+        Password: <input type="password" name="password" required>
+        <button type="submit">Join Session</button>
+    </form>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <ul>
+          {% for message in messages %}
+            <li>{{ message }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+</body>
+</html>
