@@ -1,32 +1,57 @@
 <!DOCTYPE html>
 <html>
-<head><title>Session Login</title></head>
+<head>
+    <title>Login - Create or Join Session</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .button-group {
+            margin-bottom: 20px;
+        }
+
+        .button-group button {
+            padding: 12px 24px;
+            margin: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .form-container {
+            display: none;
+            margin-top: 20px;
+        }
+
+        input {
+            padding: 10px;
+            margin: 10px;
+            width: 250px;
+        }
+
+        input[type="submit"] {
+            width: auto;
+            cursor: pointer;
+        }
+
+        ul {
+            color: red;
+            list-style: none;
+        }
+    </style>
+</head>
 <body>
-    <h1>Session Login</h1>
+    <h1 style="margin-bottom: 40px;">Website Name Session</h1>
 
-    <h2>Create a Session</h2>
-    <form method="POST">
-        <input type="hidden" name="action" value="create">
-        Password: <input type="password" name="password" required>
-        <button type="submit">Create Session</button>
-    </form>
-
-    <h2>Join a Session</h2>
-    <form method="POST">
-        <input type="hidden" name="action" value="join">
-        Session ID: <input type="text" name="session_id" required><br>
-        Password: <input type="password" name="password" required>
-        <button type="submit">Join Session</button>
-    </form>
-
-    {% with messages = get_flashed_messages() %}
-      {% if messages %}
-        <ul>
-          {% for message in messages %}
-            <li>{{ message }}</li>
-          {% endfor %}
-        </ul>
-      {% endif %}
-    {% endwith %}
+    <div style="display:flex; flex-direction:column; align-items:center; gap:20px;">
+        <a href="{{ url_for('create_session') }}">
+            <button style="padding:20px 40px; font-size:20px; width:300px; border-radius:30px;">Create New Session</button>
+        </a>
+        <a href="{{ url_for('join_session') }}">
+            <button style="padding:20px 40px; font-size:20px; width:300px; border-radius:30px;">Join Existing Session</button>
+        </a>
+    </div>
 </body>
 </html>
