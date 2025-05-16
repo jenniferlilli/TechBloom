@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<! AIed >
+<html>
+<head><title>Dashboard</title></head>
+<body>
+<h1>Dashboard</h1>
+<p>Badge IDs:</p>
+<ul>
+  {% for badge in badge_ids %}
+    <li>{{ badge }}</li>
+  {% endfor %}
+</ul>
+
+<p>Uploaded Images:</p>
+<ul>
+  {% for img in image_paths %}
+    <li>{{ img }}</li>
+  {% endfor %}
+</ul>
+</body>
+</html>
