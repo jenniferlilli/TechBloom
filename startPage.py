@@ -1,21 +1,53 @@
 #http://localhost:5000/login sigh
-import os, uuid
-import zipfile
+import os, uuid, zipfile
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from werkzeug.utils import secure_filename
 
-session_store = {}
+from sqlalchemy import create_engine, Column, Integer, String, LargeBinary
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+
+# sql setup
+Base = declarative_base()
+
+class BadgeID(Base):
+    __tablename__ = 'badge_ids'
+    id = Column(Integer, primary_key=True)
+    session_id = Column(String)
+    badge_id = Column(String)
+
+class UploadedZip(Base):
+    __tablename__ = 'uploaded_zips'
+    id = Column(Integer, primary_key=True)
+    session_id = Column(String)
+    filename = Column(String)
+    zip_data = Column(LargeBinary)  
+
+class UserSession(Base):
+    __tablename__ = 'user_sessions'
+    id = Column(Integer, primary_key=True)
+    session_id = Column(String, unique=True)
+    password = Column(String)
+
+engine = create_engine('sqlite:///data.db')  
+Base.metadata.create_all(engine)
+DBSession = sessionmaker(bind=engine)
+db_session = DBSession()
+
 
 app = Flask(__name__)
 app.secret_key = 'secret-key'
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max????
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB?
 
 ALLOWED_BADGE_EXTENSIONS = {'csv', 'txt'}
 ALLOWED_ZIP_EXTENSIONS = {'zip'}
 
+session_store = {}
+
 def allowed_file(filename, allowed_extensions):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
+
 
 @app.route('/login')
 def login():
@@ -26,11 +58,11 @@ def create_session():
     if request.method == 'POST':
         password = request.form.get('password')
         session_id = str(uuid.uuid4())[:8]
-        session_store[session_id] = password
+        db_session.add(UserSession(session_id=session_id, password=password))
+        db_session.commit()
         session['session_id'] = session_id
         flash(f'Generated Session ID: {session_id}')
         return redirect(url_for('upload_files'))
-
     return render_template('createSession.html')
 
 @app.route('/join-session', methods=['GET', 'POST'])
@@ -38,7 +70,8 @@ def join_session():
     if request.method == 'POST':
         session_id = request.form.get('session_id')
         password = request.form.get('password')
-        if session_id in session_store and session_store[session_id] == password:
+        user_session = db_session.query(UserSession).filter_by(session_id=session_id, password=password).first()
+        if user_session:
             session['session_id'] = session_id
             flash(f'Joined session: {session_id}')
             return redirect(url_for('upload_files'))
@@ -47,38 +80,59 @@ def join_session():
             return redirect(request.url)
     return render_template('joinSession.html')
 
-
 @app.route('/', methods=['GET', 'POST'])
 def upload_files():
+    session_id = session.get('session_id')
+    if not session_id:
+        flash('Please log in or create a session first.')
+        return redirect(url_for('login'))
+
     if request.method == 'POST':
         badgeFile = request.files.get('badge_file')
         zipFile = request.files.get('zip_file')
 
         if badgeFile and allowed_file(badgeFile.filename, ALLOWED_BADGE_EXTENSIONS):
-            badgePath = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(badgeFile.filename))
-            badgeFile.save(badgePath)
+            badge_lines = badgeFile.read().decode('utf-8').splitlines()
+            for line in badge_lines:
+                badge_id = line.strip()
+                if badge_id:
+                    db_session.add(BadgeID(session_id=session_id, badge_id=badge_id))
+            db_session.commit()
         else:
             flash('Invalid badge file. Must be .csv or .txt')
             return redirect(request.url)
 
         if zipFile and allowed_file(zipFile.filename, ALLOWED_ZIP_EXTENSIONS):
-            zipPath = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(zipFile.filename))
-            zipFile.save(zipPath)
+            filename = secure_filename(zipFile.filename)
+            zip_bytes = zipFile.read()  # read the whole ZIP file into bytes
+            db_session.add(UploadedZip(session_id=session_id, filename=filename, zip_data=zip_bytes))
+            db_session.commit()
         else:
             flash('Invalid ZIP file.')
             return redirect(request.url)
 
-        flash('Files uploaded successfully! You can now process them.')
+
+        flash('Files uploaded successfully.')
         return redirect(url_for('dashboard'))
 
     return render_template('upload.html')
 
+'''
 @app.route('/dashboard')
 def dashboard():
-    uploaded_files = os.listdir(app.config['UPLOAD_FOLDER'])
-    return render_template('dashboard.html', uploaded_files=uploaded_files)
+    session_id = session.get('session_id')
+    if not session_id:
+        flash('Please log in or create a session first.')
+        return redirect(url_for('login'))
+
+    badge_ids = db_session.query(BadgeID).filter_by(session_id=session_id).all()
+    uploaded_zips = db_session.query(UploadedZip).filter_by(session_id=session_id).all()
+    return render_template('dashboard.html',
+                       badge_ids=[b.badge_id for b in badge_ids],
+                       zip_filenames=[z.filename for z in uploaded_zips])
 
 
+'''
 if __name__ == '__main__':
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     app.run(debug=True)
