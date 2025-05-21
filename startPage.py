@@ -11,7 +11,8 @@ if not installed already:
 run it with python startPage.py
 don't follow terminal link...go to: http://localhost:5000/login
 '''
-import os, uuid, zipfile
+# http://localhost:5000/login sigh
+import os, uuid
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from werkzeug.utils import secure_filename
 
@@ -46,20 +47,14 @@ Base.metadata.create_all(engine)
 DBSession = sessionmaker(bind=engine)
 db_session = DBSession()
 
-
 app = Flask(__name__)
 app.secret_key = 'secret-key'
-app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB?
 
 ALLOWED_BADGE_EXTENSIONS = {'csv', 'txt'}
 ALLOWED_ZIP_EXTENSIONS = {'zip'}
 
-session_store = {}
-
 def allowed_file(filename, allowed_extensions):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
-
 
 @app.route('/login')
 def login():
@@ -85,6 +80,7 @@ def join_session():
         user_session = db_session.query(UserSession).filter_by(session_id=session_id, password=password).first()
         if user_session:
             session['session_id'] = session_id
+            session['joined_existing'] = True  # Mark this as an old session join
             flash(f'Joined session: {session_id}')
             return redirect(url_for('upload_files'))
         else:
@@ -98,6 +94,13 @@ def upload_files():
     if not session_id:
         flash('Please log in or create a session first.')
         return redirect(url_for('login'))
+
+        if session.pop('joined_existing', False):
+        existing_badges = db_session.query(BadgeID).filter_by(session_id=session_id).first()
+        existing_zip = db_session.query(UploadedZip).filter_by(session_id=session_id).first()
+        if existing_badges or existing_zip:
+            flash('Files already uploaded for this session. Skipping reupload.')
+            return redirect(url_for('dashboard'))
 
     if request.method == 'POST':
         badgeFile = request.files.get('badge_file')
@@ -116,20 +119,18 @@ def upload_files():
 
         if zipFile and allowed_file(zipFile.filename, ALLOWED_ZIP_EXTENSIONS):
             filename = secure_filename(zipFile.filename)
-            zip_bytes = zipFile.read()  # read the whole ZIP file into bytes
+            zip_bytes = zipFile.read()
             db_session.add(UploadedZip(session_id=session_id, filename=filename, zip_data=zip_bytes))
             db_session.commit()
         else:
             flash('Invalid ZIP file.')
             return redirect(request.url)
 
-
         flash('Files uploaded successfully.')
         return redirect(url_for('dashboard'))
 
     return render_template('upload.html')
 
-'''
 @app.route('/dashboard')
 def dashboard():
     session_id = session.get('session_id')
@@ -140,11 +141,8 @@ def dashboard():
     badge_ids = db_session.query(BadgeID).filter_by(session_id=session_id).all()
     uploaded_zips = db_session.query(UploadedZip).filter_by(session_id=session_id).all()
     return render_template('dashboard.html',
-                       badge_ids=[b.badge_id for b in badge_ids],
-                       zip_filenames=[z.filename for z in uploaded_zips])
+                           badge_ids=[b.badge_id for b in badge_ids],
+                           zip_filenames=[z.filename for z in uploaded_zips])
 
-
-'''
 if __name__ == '__main__':
-    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     app.run(debug=True)
