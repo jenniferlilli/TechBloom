@@ -113,7 +113,7 @@ def upload_files():
                 if badge_id:
                     db_session.add(BadgeID(session_id=session_id, badge_id=badge_id))
             db_session.commit()
-        else:
+        elif not session.pop('joined_existing', False):
             flash('Invalid badge file. Must be .csv or .txt')
             return redirect(request.url)
 
@@ -122,7 +122,7 @@ def upload_files():
             zip_bytes = zipFile.read()
             db_session.add(UploadedZip(session_id=session_id, filename=filename, zip_data=zip_bytes))
             db_session.commit()
-        else:
+        elif not session.pop('joined_existing', False):
             flash('Invalid ZIP file.')
             return redirect(request.url)
 
