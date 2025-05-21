@@ -1,16 +1,3 @@
-'''
-running it on ur own computer
-download files as a zip
-create folder inside called 'templates' and put all the .html files in it
-go to terminal
-cd TechBloom folder path
-if not installed already:
-    - pip install python (??)
-    - pip install flask
-    - pip install sqlalchemy
-run it with python startPage.py
-don't follow terminal link...go to: http://localhost:5000/login
-'''
 # http://localhost:5000/login sigh
 import os, uuid
 from flask import Flask, render_template, request, redirect, url_for, flash, session
@@ -22,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 
 # sql setup
 Base = declarative_base()
+joinedSession = False
 
 class BadgeID(Base):
     __tablename__ = 'badge_ids'
@@ -82,6 +70,7 @@ def join_session():
             session['session_id'] = session_id
             session['joined_existing'] = True  # Mark this as an old session join
             flash(f'Joined session: {session_id}')
+            joinedSession = True;
             return redirect(url_for('upload_files'))
         else:
             flash('Invalid session ID or password.')
@@ -96,16 +85,18 @@ def upload_files():
         return redirect(url_for('login'))
 
         if session.pop('joined_existing', False):
-        existing_badges = db_session.query(BadgeID).filter_by(session_id=session_id).first()
-        existing_zip = db_session.query(UploadedZip).filter_by(session_id=session_id).first()
+            existing_badges = db_session.query(BadgeID).filter_by(session_id=session_id).first()
+            existing_zip = db_session.query(UploadedZip).filter_by(session_id=session_id).first()
+'''
         if existing_badges or existing_zip:
             flash('Files already uploaded for this session. Skipping reupload.')
             return redirect(url_for('dashboard'))
+'''
 
     if request.method == 'POST':
         badgeFile = request.files.get('badge_file')
         zipFile = request.files.get('zip_file')
-
+        
         if badgeFile and allowed_file(badgeFile.filename, ALLOWED_BADGE_EXTENSIONS):
             badge_lines = badgeFile.read().decode('utf-8').splitlines()
             for line in badge_lines:
@@ -113,18 +104,25 @@ def upload_files():
                 if badge_id:
                     db_session.add(BadgeID(session_id=session_id, badge_id=badge_id))
             db_session.commit()
-        elif not session.pop('joined_existing', False):
-            flash('Invalid badge file. Must be .csv or .txt')
-            return redirect(request.url)
+
+        else:
+            if joinedSession == True :
+                flash('No Upload')
+            else:
+                flash('Invalid badge file. Must be .csv or .txt')
+                return redirect(request.url)
 
         if zipFile and allowed_file(zipFile.filename, ALLOWED_ZIP_EXTENSIONS):
             filename = secure_filename(zipFile.filename)
             zip_bytes = zipFile.read()
             db_session.add(UploadedZip(session_id=session_id, filename=filename, zip_data=zip_bytes))
             db_session.commit()
-        elif not session.pop('joined_existing', False):
-            flash('Invalid ZIP file.')
-            return redirect(request.url)
+        else:
+            if joinedSession == True :
+                flash('No Upload')
+            else:
+                flash('Invalid ZIP file.')
+                return redirect(request.url)
 
         flash('Files uploaded successfully.')
         return redirect(url_for('dashboard'))
