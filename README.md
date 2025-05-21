@@ -1,6 +1,6 @@
 # TechBloom
 
-running it on ur own computer
+#running it on ur own computer
 download files as a zip
 create folder inside called 'templates' and put all the .html files in it
 go to terminal
