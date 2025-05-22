@@ -21,6 +21,6 @@ run it with python startPage.py
 don't follow terminal link...go to: http://localhost:5000/login
 
 
-# Aesthtics:
+# Aesthetics:
 
 shade used: #FFE4E1
