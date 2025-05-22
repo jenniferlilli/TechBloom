@@ -23,4 +23,4 @@ don't follow terminal link...go to: http://localhost:5000/login
 
 # Aesthetics:
 
-shade used: #FFE4E1
+shade used: #f1dada
