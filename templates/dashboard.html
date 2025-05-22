@@ -16,6 +16,14 @@
   {% for img in image_paths %}
     <li>{{ img }}</li>
   {% endfor %}
+  
+<p>OCR Results:</p>
+<ul>
+  {% for result in ocr_results %}
+    <li><strong>{{ result.filename }}</strong>: {{ result.extracted_text }}</li>
+  {% endfor %}
+</ul>
+  
 </ul>
 </body>
 </html>
