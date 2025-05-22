@@ -3,9 +3,15 @@ import os, uuid
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from werkzeug.utils import secure_filename
 
+
 from sqlalchemy import create_engine, Column, Integer, String, LargeBinary
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy import Text
+
+from ocr_utils import extract_text_from_upload, extract_text_from_region
+from io import BytesIO import zipfile
+from ocr_utils import extract_text_from_upload
 
 # sql setup
 Base = declarative_base()
@@ -116,6 +122,14 @@ def upload_files():
             zip_bytes = zipFile.read()
             db_session.add(UploadedZip(session_id=session_id, filename=filename, zip_data=zip_bytes))
             db_session.commit()
+            zip_stream = BytesIO(zip_bytes)
+            with zipfile.ZipFile(zip_stream) as archive:
+                for file_info in archive.infolist():
+                    if file_info.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+                        with archive.open(file_info) as image_file:
+                            image_data = image_file.read()
+                            text = extract_text_from_upload(image_data)
+                            print(f"OCR result for {file_info.filename}:\n{text}\n")
         elif zipFile:
             flash('Invalid ZIP file.')
             return redirect(request.url)
@@ -138,6 +152,11 @@ def dashboard():
     return render_template('dashboard.html',
                            badge_ids=[b.badge_id for b in badge_ids],
                            zip_filenames=[z.filename for z in uploaded_zips])
-
+class OCRResult(Base):
+    __tablename__ = 'ocr_results'
+    id = Column(Integer, primary_key=True)
+    session_id = Column(String)
+    filename = Column(String)
+    extracted_text = Column(Text)
 if __name__ == '__main__':
     app.run(debug=True)
