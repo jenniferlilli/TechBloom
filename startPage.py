@@ -12,6 +12,7 @@ from sqlalchemy import Text
 from ocr_utils import extract_text_from_upload, extract_text_from_region
 from io import BytesIO import zipfile
 from ocr_utils import extract_text_from_upload
+import zipfilw
 
 # sql setup
 Base = declarative_base()
@@ -29,6 +30,19 @@ class UploadedZip(Base):
     session_id = Column(String)
     filename = Column(String)
     zip_data = Column(LargeBinary)  
+    
+class UserSession(Base):
+    __tablename__ = 'user_sessions'
+    id = Column(Integer, primary_key=True)
+    session_id = Column(String, unique=True)
+    password = Column(String)
+    
+class OCRResult(Base):
+    __tablename__ = 'ocr_results'
+    id = Column(Integer, primary_key=True)
+    session_id = Column(String)
+    filename = Column(String)
+    extracted_text = Column(Text)
 
 class UserSession(Base):
     __tablename__ = 'user_sessions'
@@ -130,6 +144,12 @@ def upload_files():
                             image_data = image_file.read()
                             text = extract_text_from_upload(image_data)
                             print(f"OCR result for {file_info.filename}:\n{text}\n")
+                        db_session.add(OCRResult(
+                            session_id=session_id,
+                            filename=file_info.filename,
+                            extracted_text=text
+                        ))
+                db_session.commit()
         elif zipFile:
             flash('Invalid ZIP file.')
             return redirect(request.url)
@@ -149,14 +169,11 @@ def dashboard():
 
     badge_ids = db_session.query(BadgeID).filter_by(session_id=session_id).all()
     uploaded_zips = db_session.query(UploadedZip).filter_by(session_id=session_id).all()
+    ocr_results = db_session.query(OCRResult).filter_by(session_id=session_id).all()
     return render_template('dashboard.html',
                            badge_ids=[b.badge_id for b in badge_ids],
-                           zip_filenames=[z.filename for z in uploaded_zips])
-class OCRResult(Base):
-    __tablename__ = 'ocr_results'
-    id = Column(Integer, primary_key=True)
-    session_id = Column(String)
-    filename = Column(String)
-    extracted_text = Column(Text)
+                           zip_filenames=[z.filename for z in uploaded_zips],
+                           ocr_results = ocr_results)
+
 if __name__ == '__main__':
     app.run(debug=True)
