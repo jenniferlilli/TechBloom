@@ -10,7 +10,7 @@ cd TechBloom folder path
 
 if not installed already:
 
-    - pip install python (??)
+    - pip install python (if not already installed)
 
     - pip install flask
 
