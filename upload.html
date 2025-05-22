@@ -62,13 +62,24 @@
 	<p class="file-name" id="zip-file-name"></p>
     </div>
 <div style="text-align: center; margin-top: 30px;">
+    <button 
+        style="padding: 12px 24px; font-size: 16px; border-radius: 8px; background-color: #d05c83; color: white; border: none; cursor: pointer;"
+        onclick="uploadFiles()"
+    >
+        Submit Files
+    </button>
+
+    {% if joined_existing %}
+        <br><br>
         <button 
-            style="padding: 12px 24px; font-size: 16px; border-radius: 8px; background-color: ##a6a6a6; color: white; border: none; cursor: pointer;"
-            onclick="uploadFiles()"
+            style="padding: 10px 20px; font-size: 14px; border-radius: 8px; background-color: #888; color: white; border: none; cursor: pointer;"
+            onclick="skipUpload()"
         >
-            Submit Files
+            Skip Upload (Use existing files)
         </button>
-    </div>
+    {% endif %}
+</div>
+
 	
 
 
@@ -168,6 +179,26 @@
             alert('Upload failed.');
         });
     }
+function skipUpload() {
+    fetch("{{ url_for('upload_files') }}", {
+        method: 'POST',
+        body: new FormData()  // empty form
+    })
+    .then(response => {
+        if (response.redirected) {
+            window.location.href = response.url;
+        } else {
+            return response.text().then(data => {
+                alert('Skip failed. Check server response.');
+                console.log(data);
+            });
+        }
+    })
+    .catch(error => {
+        console.error('Skip error:', error);
+        alert('Skip failed.');
+    });
+}
 </script>
 
 </body>
