@@ -13,7 +13,6 @@ from ocr_utils import extract_text_from_upload, extract_text_from_region
 from io import BytesIO 
 import zipfile
 from ocr_utils import extract_text_from_upload
-import zipfilw
 
 # sql setup
 Base = declarative_base()
