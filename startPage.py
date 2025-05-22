@@ -44,12 +44,6 @@ class OCRResult(Base):
     filename = Column(String)
     extracted_text = Column(Text)
 
-class UserSession(Base):
-    __tablename__ = 'user_sessions'
-    id = Column(Integer, primary_key=True)
-    session_id = Column(String, unique=True)
-    password = Column(String)
-
 engine = create_engine('sqlite:///data.db')  
 Base.metadata.create_all(engine)
 DBSession = sessionmaker(bind=engine)
