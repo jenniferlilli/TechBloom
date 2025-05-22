@@ -1,21 +1,84 @@
 <!DOCTYPE html>
 <html>
 <head><title>Create Session</title></head>
-	<style>
-	body{
-		font-family: Verdana , sans-serif;
-           	 text-align: center;
-           	 padding: 40px;
-		background-color: #ffe6e6;
-		color: #000000;
-		}
-	</style>
-</head>
+<style>
+    body{
+        font-family: Tahoma;
+	text-align: center;
+	padding: 40px;
+    }
+    .square {
+      height: 500px;
+      width: 500px;
+      background-color: #f1dada;
+
+    }
+    input {
+       border-radius: 21px;
+       padding: 10px;
+       border: 2px solid #ccc;
+       width: 250px;
+    }
+
+    .button-group
+            margin-bottom: 20px;
+    }
+
+    .button-group button {
+            padding: 12px 24px;
+            margin: 10px;
+            font-size: 16px;
+            cursor: pointer;
+    }
+    input{
+	padding: 12px 24px;
+	margin: 10px;
+            font-size: 16px;
+	width: 250px;
+    }
+    input[type=password]{
+            padding: 12px 24px;
+            margin: 10px;
+            font-size: 16px;
+            cursor: pointer;
+
+    }
+    input[type=submit]{
+	    background-color: #f1dada
+    }
+
+    .myDiv{
+	border: 1px outset black;
+	background-color: #f1dada
+	text-align: center;
+    }
+    ul {
+        color: red;
+        list-style: none;
+    }
+</style>
 <body>
     <h1>Create a New Session</h1>
     <form method="POST">
-        <input type="password" name="password" placeholder="Enter a password" required><br><br>
-        <input type="submit" value="Create Session">
+        <input type="password" name="password" placeholder="Enter here" required><br><br>
+
+
+	<div style="display:flex; flex-direction:column; align-items:center; gap:20px;">
+        <a href="{{ url_for('upload_files') }}">
+            <button style="padding:20px 40px; font-size: 17px; width:200px; border-radius:30px; 		background-color:#f1dada; font-family:Tahoma  ;  ">Create Session</button>
+        </a>
+
     </form>
+<!-- logo at the bottom of the screen -->
+    <img src="{{ url_for('static', filename='logo.png') }}" id="bottom-logo">
+    <style>
+        #bottom-logo {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            width: 250px;
+            opacity: 0.9;
+        }
+</style>
 </body>
 </html>
