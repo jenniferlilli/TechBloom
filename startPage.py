@@ -1,4 +1,5 @@
-import os, uuid, zipfile
+# http://localhost:5000/login sigh
+import os, uuid
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from werkzeug.utils import secure_filename
 
@@ -8,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 
 # sql setup
 Base = declarative_base()
+joinedSession = False
 
 class BadgeID(Base):
     __tablename__ = 'badge_ids'
@@ -33,20 +35,14 @@ Base.metadata.create_all(engine)
 DBSession = sessionmaker(bind=engine)
 db_session = DBSession()
 
-
 app = Flask(__name__)
 app.secret_key = 'secret-key'
-app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB?
 
 ALLOWED_BADGE_EXTENSIONS = {'csv', 'txt'}
 ALLOWED_ZIP_EXTENSIONS = {'zip'}
 
-session_store = {}
-
 def allowed_file(filename, allowed_extensions):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
-
 
 @app.route('/login')
 def login():
@@ -72,12 +68,14 @@ def join_session():
         user_session = db_session.query(UserSession).filter_by(session_id=session_id, password=password).first()
         if user_session:
             session['session_id'] = session_id
+            session['joined_existing'] = True
             flash(f'Joined session: {session_id}')
             return redirect(url_for('upload_files'))
         else:
             flash('Invalid session ID or password.')
             return redirect(request.url)
     return render_template('joinSession.html')
+
 
 @app.route('/', methods=['GET', 'POST'])
 def upload_files():
@@ -86,9 +84,21 @@ def upload_files():
         flash('Please log in or create a session first.')
         return redirect(url_for('login'))
 
+    joined_existing = session.get('joined_existing', False)
+    existing_badges = db_session.query(BadgeID).filter_by(session_id=session_id).first()
+    existing_zip = db_session.query(UploadedZip).filter_by(session_id=session_id).first()
+
     if request.method == 'POST':
         badgeFile = request.files.get('badge_file')
         zipFile = request.files.get('zip_file')
+
+        if not badgeFile and not zipFile:
+            if joined_existing and (existing_badges or existing_zip):
+                flash('No new files uploaded. Skipping reupload.')
+                return redirect(url_for('dashboard'))
+            else:
+                flash('Please upload both badge and ZIP files.')
+                return redirect(request.url)
 
         if badgeFile and allowed_file(badgeFile.filename, ALLOWED_BADGE_EXTENSIONS):
             badge_lines = badgeFile.read().decode('utf-8').splitlines()
@@ -97,26 +107,25 @@ def upload_files():
                 if badge_id:
                     db_session.add(BadgeID(session_id=session_id, badge_id=badge_id))
             db_session.commit()
-        else:
+        elif badgeFile:
             flash('Invalid badge file. Must be .csv or .txt')
             return redirect(request.url)
 
         if zipFile and allowed_file(zipFile.filename, ALLOWED_ZIP_EXTENSIONS):
             filename = secure_filename(zipFile.filename)
-            zip_bytes = zipFile.read()  # read the whole ZIP file into bytes
+            zip_bytes = zipFile.read()
             db_session.add(UploadedZip(session_id=session_id, filename=filename, zip_data=zip_bytes))
             db_session.commit()
-        else:
+        elif zipFile:
             flash('Invalid ZIP file.')
             return redirect(request.url)
-
 
         flash('Files uploaded successfully.')
         return redirect(url_for('dashboard'))
 
-    return render_template('upload.html')
+    return render_template('upload.html', joined_existing=joined_existing and (existing_badges or existing_zip))
 
-'''
+
 @app.route('/dashboard')
 def dashboard():
     session_id = session.get('session_id')
@@ -127,11 +136,8 @@ def dashboard():
     badge_ids = db_session.query(BadgeID).filter_by(session_id=session_id).all()
     uploaded_zips = db_session.query(UploadedZip).filter_by(session_id=session_id).all()
     return render_template('dashboard.html',
-                       badge_ids=[b.badge_id for b in badge_ids],
-                       zip_filenames=[z.filename for z in uploaded_zips])
+                           badge_ids=[b.badge_id for b in badge_ids],
+                           zip_filenames=[z.filename for z in uploaded_zips])
 
-
-'''
 if __name__ == '__main__':
-    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     app.run(debug=True)
