@@ -15,6 +15,10 @@ if not installed already:
     - pip install flask
 
     - pip install sqlalchemy
+    
+    - pip install pillow
+    
+    - pip install pytesseract
 
 run it with python startPage.py
 
