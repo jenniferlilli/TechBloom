@@ -3,6 +3,9 @@
 <head>
     <title>Website Name Upload Site</title>
     <style>
+        body{
+	    font-family: Tahoma;
+        }
         .drop-area {
             border: 2px dashed #ccc;
             width: 400px;
@@ -34,7 +37,7 @@
     </style>
 </head>
 <body>
-    <h1 style="text-align: center;">Upload Badge ID List and ZIP File</h1>
+    <h1 style="text-align: center; margin-bottom: 55px; margin-top: 70px">Upload Badge ID List and ZIP File</h1>
 
     {% with messages = get_flashed_messages() %}
         {% if messages %}
@@ -46,7 +49,7 @@
         {% endif %}
     {% endwith %}
 
-    <div id="drop-area-badge" class="drop-area">
+    <div id="drop-area-badge" class="drop-area" style="margin-bottom: 30px;">
 	<p> Ballot Files Upload </p>
         <p>Drop <strong>.csv</strong> or <strong>.txt</strong> badge file here<br>or click to select</p>
         <input type="file" id="file-input-badge" accept=".csv,.txt">
@@ -61,9 +64,9 @@
         <button class="upload-btn" onclick="document.getElementById('file-input-zip').click()">Choose ZIP File</button>
 	<p class="file-name" id="zip-file-name"></p>
     </div>
-<div style="text-align: center; margin-top: 30px;">
+<div style="text-align: center; margin-top: 25px;">
     <button 
-        style="padding: 12px 24px; font-size: 16px; border-radius: 8px; background-color: #d05c83; color: white; border: none; cursor: pointer;"
+        style="padding: 14px 28px; font-size: 16px; border-radius: 25px; background-color: #FFD2D9; color: black; border: 1.5px solid #363636; cursor: pointer;"
         onclick="uploadFiles()"
     >
         Submit Files
