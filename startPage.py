@@ -106,9 +106,9 @@ def upload_files():
         badgeFile = request.files.get('badge_file')
         zipFile = request.files.get('zip_file')
 
-        if not badgeFile and not zipFile:
+        if not badgeFile and not zipFile and joined_existing:
             if joined_existing and (existing_badges or existing_zip):
-                flash('No new files uploaded. Skipping reupload.')
+                flash('Empty session, please reupload.')
                 return redirect(url_for('dashboard'))
             else:
                 flash('Please upload both badge and ZIP files.')
