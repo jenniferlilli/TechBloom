@@ -3,14 +3,13 @@ import os, uuid
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from werkzeug.utils import secure_filename
 
-
 from sqlalchemy import create_engine, Column, Integer, String, LargeBinary
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import Text
 
 from ocr_utils import extract_text_from_upload, extract_text_from_region
-from io import BytesIO 
+from io import BytesIO
 import zipfile
 from ocr_utils import extract_text_from_upload
 
@@ -18,25 +17,29 @@ from ocr_utils import extract_text_from_upload
 Base = declarative_base()
 joinedSession = False
 
+
 class BadgeID(Base):
     __tablename__ = 'badge_ids'
     id = Column(Integer, primary_key=True)
     session_id = Column(String)
     badge_id = Column(String)
 
+
 class UploadedZip(Base):
     __tablename__ = 'uploaded_zips'
     id = Column(Integer, primary_key=True)
     session_id = Column(String)
     filename = Column(String)
-    zip_data = Column(LargeBinary)  
-    
+    zip_data = Column(LargeBinary)
+
+
 class UserSession(Base):
     __tablename__ = 'user_sessions'
     id = Column(Integer, primary_key=True)
     session_id = Column(String, unique=True)
     password = Column(String)
-    
+
+
 class OCRResult(Base):
     __tablename__ = 'ocr_results'
     id = Column(Integer, primary_key=True)
@@ -44,7 +47,8 @@ class OCRResult(Base):
     filename = Column(String)
     extracted_text = Column(Text)
 
-engine = create_engine('sqlite:///data.db')  
+
+engine = create_engine('sqlite:///data.db')
 Base.metadata.create_all(engine)
 DBSession = sessionmaker(bind=engine)
 db_session = DBSession()
@@ -55,12 +59,15 @@ app.secret_key = 'secret-key'
 ALLOWED_BADGE_EXTENSIONS = {'csv', 'txt'}
 ALLOWED_ZIP_EXTENSIONS = {'zip'}
 
+
 def allowed_file(filename, allowed_extensions):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
+
 
 @app.route('/login')
 def login():
     return render_template('login.html')
+
 
 @app.route('/create-session', methods=['GET', 'POST'])
 def create_session():
@@ -73,6 +80,7 @@ def create_session():
         flash(f'Generated Session ID: {session_id}')
         return redirect(url_for('upload_files'))
     return render_template('createSession.html')
+
 
 @app.route('/join-session', methods=['GET', 'POST'])
 def join_session():
@@ -167,7 +175,8 @@ def dashboard():
     return render_template('dashboard.html',
                            badge_ids=[b.badge_id for b in badge_ids],
                            zip_filenames=[z.filename for z in uploaded_zips],
-                           ocr_results = ocr_results)
+                           ocr_results=ocr_results)
+
 
 if __name__ == '__main__':
     app.run(debug=True)
