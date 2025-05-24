@@ -1,5 +1,6 @@
 from PIL import Image
 import pytesseract
+pytesseract.pytesseract.tesseract_cmd = '/opt/local/bin/tesseract'
 import boto3
 from io import BytesIO
 from db_utils import get_connection, is_valid_badge, insert_ballot, update_ballot_status, insert_vote

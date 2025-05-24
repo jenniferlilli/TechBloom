@@ -1,5 +1,5 @@
 # http://localhost:5000/login sigh
-import os, uuid
+import os, uuid, boto3
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from werkzeug.utils import secure_filename
 
@@ -12,6 +12,8 @@ from ocr_utils import extract_text_from_upload, extract_text_from_region
 from io import BytesIO
 import zipfile
 from ocr_utils import extract_text_from_upload
+from flask import jsonify
+from botocore.exceptions import NoCredentialsError, ClientError
 
 # sql setup
 Base = declarative_base()
@@ -53,6 +55,8 @@ Base.metadata.create_all(engine)
 DBSession = sessionmaker(bind=engine)
 db_session = DBSession()
 
+s3 = boto3.client('s3')
+bucket_name = 'techbloom-ballots'
 app = Flask(__name__)
 app.secret_key = 'secret-key'
 
@@ -60,8 +64,36 @@ ALLOWED_BADGE_EXTENSIONS = {'csv', 'txt'}
 ALLOWED_ZIP_EXTENSIONS = {'zip'}
 
 
+
+def upload_to_s3(file_obj, bucket, key):
+    try:
+        s3.upload_fileobj(file_obj, bucket, key)
+        print(f"Uploaded to S3: {key}")
+        return True
+    except (NoCredentialsError, ClientError) as e:
+        print(f"Upload failed: {e}")
+        return False
+
+
+
 def allowed_file(filename, allowed_extensions):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
+
+
+
+def is_junk_file(file_info):
+    filename = file_info.filename
+    basename = os.path.basename(filename)
+
+    return (
+        filename.startswith('__MACOSX/') or           # macOS archive metadata
+        '/__MACOSX/' in filename or                   # Catch nested __MACOSX
+        basename.startswith('._') or                  # macOS resource forks
+        basename.startswith('.') or                   # Hidden files (Linux/macOS)
+        basename in ('Thumbs.db', 'desktop.ini') or   # Windows metadata files
+        file_info.is_dir() or                         # Directories
+        not basename.strip()                          # Empty or whitespace-only names
+    )
 
 
 @app.route('/login')
@@ -98,8 +130,7 @@ def join_session():
             return redirect(request.url)
     return render_template('joinSession.html')
 
-
-@app.route('/', methods=['GET', 'POST'])
+@app.route('/upload-file', methods=['GET', 'POST'])
 def upload_files():
     session_id = session.get('session_id')
     if not session_id:
@@ -110,6 +141,23 @@ def upload_files():
     existing_badges = db_session.query(BadgeID).filter_by(session_id=session_id).first()
     existing_zip = db_session.query(UploadedZip).filter_by(session_id=session_id).first()
 
+    # Handle raw image OCR API (likely JS frontend)
+    if request.method == 'POST' and 'file' in request.files and len(request.files) == 1:
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No selected file'}), 400
+
+        if file and allowed_file(file.filename):
+            image_data = file.read()
+            try:
+                text = extract_text_from_upload(image_data)
+                return jsonify({'text': text})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+        else:
+            return jsonify({'error': 'Unsupported file format'}), 400
+
+    # Handle full form POST with badge and zip
     if request.method == 'POST':
         badgeFile = request.files.get('badge_file')
         zipFile = request.files.get('zip_file')
@@ -138,20 +186,36 @@ def upload_files():
             zip_bytes = zipFile.read()
             db_session.add(UploadedZip(session_id=session_id, filename=filename, zip_data=zip_bytes))
             db_session.commit()
+
             zip_stream = BytesIO(zip_bytes)
             with zipfile.ZipFile(zip_stream) as archive:
                 for file_info in archive.infolist():
-                    if file_info.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+                    inner_filename = file_info.filename
+                    if is_junk_file(file_info):
+                        continue  # Skip junk files
+
+                    if inner_filename.lower().endswith(('.png', '.jpg', '.jpeg')):
                         with archive.open(file_info) as image_file:
-                            image_data = image_file.read()
-                            text = extract_text_from_upload(image_data)
-                            print(f"OCR result for {file_info.filename}:\n{text}\n")
-                        db_session.add(OCRResult(
-                            session_id=session_id,
-                            filename=file_info.filename,
-                            extracted_text=text
-                        ))
-                db_session.commit()
+                            key = f"{session_id}/{os.path.basename(inner_filename)}"
+                            image_stream = BytesIO(image_file.read())
+                            image_stream.seek(0)
+                            if upload_to_s3(image_stream, bucket_name, key):
+                                try:
+                                    s3_object = s3.get_object(Bucket=bucket_name, Key=key)
+                                    s3_bytes = s3_object['Body'].read()
+                                    image_stream = BytesIO(s3_bytes)
+                                    print(type(s3_bytes))
+                                    print(len(s3_bytes))
+                                    text = extract_text_from_upload(image_stream)
+                                    print(f"OCR result for {inner_filename}:\n{text}\n")
+                                    db_session.add(OCRResult(
+                                        session_id=session_id,
+                                        filename=inner_filename,
+                                        extracted_text=text
+                                    ))
+                                except Exception as e:
+                                    print(f"Failed to process {inner_filename}: {e}")
+            db_session.commit()
         elif zipFile:
             flash('Invalid ZIP file.')
             return redirect(request.url)
@@ -160,7 +224,6 @@ def upload_files():
         return redirect(url_for('dashboard'))
 
     return render_template('upload.html', joined_existing=joined_existing and (existing_badges or existing_zip))
-
 
 @app.route('/dashboard')
 def dashboard():
@@ -176,7 +239,6 @@ def dashboard():
                            badge_ids=[b.badge_id for b in badge_ids],
                            zip_filenames=[z.filename for z in uploaded_zips],
                            ocr_results=ocr_results)
-
 
 if __name__ == '__main__':
     app.run(debug=True)

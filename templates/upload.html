@@ -158,28 +158,27 @@
             alert('Please provide both a badge file and a ZIP file.');
             return;
         }
-
         const formData = new FormData();
         formData.append('badge_file', badgeFile);
         formData.append('zip_file', zipFile);
 
         fetch("{{ url_for('upload_files') }}", {
             method: 'POST',
-            body: formData
+            body: formData,
+            credentials: 'same-origin'  // VERY IMPORTANT for Flask session cookies
         })
-        .then(response => {
+        .then(async response => {
             if (response.redirected) {
                 window.location.href = response.url;
             } else {
-                return response.text().then(data => {
-                    alert('Upload failed. Check server logs or validations.');
-                    console.log(data);
-                });
+                const text = await response.text();
+                alert(`Upload failed with status ${response.status}: ${text}`);
+                console.error("Server said:", text);
             }
         })
         .catch(error => {
             console.error('Upload error:', error);
-            alert('Upload failed.');
+            alert('Upload failed due to fetch error.');
         });
     }
 function skipUpload() {
