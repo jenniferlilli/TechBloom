@@ -36,6 +36,18 @@ def parse_votes(text):
         i += 1
 
     return votes
+def process_local_ballot(image_path): #easier for immediate prining to dashboard
+    with open(image_path, 'rb') as f:
+        image = Image.open(f)
+        text = pytesseract.image_to_string(image)
+
+        badge_id = parse_badge_id(text)
+        votes = parse_votes(text)
+        return {
+            "image": image_path,
+            "badge_id": badge_id,
+            "votes": votes
+        }
 
 
 def process_ballot_from_s3(s3_bucket, s3_key, session_id):
