@@ -1,0 +1,267 @@
+import cv2
+import numpy as np
+import easyocr
+import re
+import pytesseract
+
+
+def read_digits_tesseract(img):
+   config = "--psm 7 -c tessedit_char_whitelist=0123456789"
+   return pytesseract.image_to_string(img, config=config).strip()
+
+
+reader = easyocr.Reader(['en'], gpu=False)
+
+
+def preprocess(image):
+   gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+   blur = cv2.GaussianBlur(gray, (3, 3), 0)
+   _, binary = cv2.threshold(blur, 180, 255, cv2.THRESH_BINARY_INV)
+   cv2.imwrite("/Users/katherinexu/Downloads/TechBloom-main/testCases/CamScannerTests/debug_binary.jpg", binary)
+   return binary
+
+
+
+
+def preprocess_badge_roi(roi):
+   gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+
+
+   # Contrast-limited adaptive histogram equalization (CLAHE)
+   clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+   enhanced = clahe.apply(gray)
+
+
+   # Sharpening to define digit edges
+   kernel = np.array([[0, -1, 0],
+                      [-1, 5,-1],
+                      [0, -1, 0]])
+   sharpened = cv2.filter2D(enhanced, -1, kernel)
+
+
+   # Adaptive thresholding preserves strokes better than Otsu in some cases
+   binary = cv2.adaptiveThreshold(
+       sharpened, 255,
+       cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+       cv2.THRESH_BINARY_INV, 11, 2
+   )
+
+
+   return binary
+
+
+
+
+def detect_badge_id(image):
+   h, w, _ = image.shape
+   roi = image[0:int(h * 0.25), int(w * 0.65):w]  # Top-right region
+   cv2.imwrite("/Users/katherinexu/Downloads/TechBloom-main/testCases/CamScannerTests/debug_roi.jpg", roi)
+   processed_roi = preprocess_badge_roi(roi)
+   ocr_results = reader.readtext(processed_roi, detail=0, paragraph=False)
+
+
+   for text in ocr_results:
+       digits = re.findall(r'\d', text)
+       if len(digits) >= 5:
+           return ''.join(digits[:5])
+
+
+   return ''
+
+
+def detect_table_cells(image):
+   binary = preprocess(image)
+   horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (40, 1))
+   vertical_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 40))
+
+
+   detect_horizontal = cv2.morphologyEx(binary, cv2.MORPH_OPEN, horizontal_kernel, iterations=1)
+   detect_vertical = cv2.morphologyEx(binary, cv2.MORPH_OPEN, vertical_kernel, iterations=1)
+
+
+   grid = cv2.addWeighted(detect_horizontal, 0.5, detect_vertical, 0.5, 0.0)
+   kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+   grid = cv2.dilate(grid, kernel, iterations=1)
+   cv2.imwrite("/Users/katherinexu/Downloads/TechBloom-main/testCases/CamScannerTests/debug_grid.jpg", grid)
+   contours, _ = cv2.findContours(grid, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+
+   boxes = []
+   for cnt in contours:
+       x, y, w, h = cv2.boundingRect(cnt)
+       if 40 < w < 800 and 20 < h < 100:
+           boxes.append((x, y, w, h))
+
+
+   boxes = sorted(boxes, key=lambda b: (b[1], b[0]))
+
+
+   return boxes
+
+
+def cluster_rows_into_tables(rows, x_overlap_thresh=50):
+   """
+   Groups rows into separate tables by horizontal alignment (X-axis overlap).
+   """
+   tables = []
+   for row in rows:
+       x_coords = [box[0] for box in row]
+       row_x_min = min(x_coords)
+       row_x_max = max([x + w for (x, _, w, _) in row])
+
+
+       placed = False
+       for table in tables:
+           table_x_min = table['x_min']
+           table_x_max = table['x_max']
+           if not (row_x_max < table_x_min - x_overlap_thresh or row_x_min > table_x_max + x_overlap_thresh):
+               table['rows'].append(row)
+               table['x_min'] = min(table_x_min, row_x_min)
+               table['x_max'] = max(table_x_max, row_x_max)
+               placed = True
+               break
+
+
+       if not placed:
+           tables.append({'rows': [row], 'x_min': row_x_min, 'x_max': row_x_max})
+
+
+   return [table['rows'] for table in tables]
+def split_tables_by_x_gap(boxes):
+   # get all left edges
+   xs = sorted([x for x, y, w, h in boxes])
+   # find largest adjacent gap
+   gaps = [(xs[i+1] - xs[i], xs[i], xs[i+1]) for i in range(len(xs)-1)]
+   max_gap, left_edge, right_edge = max(gaps, key=lambda g: g[0])
+   split_x = left_edge + max_gap//2
+   # partition boxes
+   left = [b for b in boxes if b[0] < split_x]
+   right = [b for b in boxes if b[0] >= split_x]
+   return left, right
+
+
+def group_cells_by_rows(boxes, y_thresh=10):
+   """
+   Groups bounding boxes into rows based on proximity of their top Y positions.
+   """
+   boxes = sorted(boxes, key=lambda b: (b[1], b[0]))  # Top to bottom, then left to right
+   rows = []
+
+
+   for box in boxes:
+       x, y, w, h = box
+       placed = False
+
+
+       for row in rows:
+           # Compare to the first box in the row
+           ry = row[0][1]
+           if abs(y - ry) < y_thresh:
+               row.append(box)
+               placed = True
+               break
+
+
+       if not placed:
+           rows.append([box])
+
+
+   # Sort boxes within each row left to right
+   for row in rows:
+       row.sort(key=lambda b: b[0])
+
+
+   return rows
+
+
+def filter_valid_boxes(boxes, min_y=100):
+   """
+   Filters out boxes above a Y threshold (e.g., headers or logos).
+   """
+   return [box for box in boxes if box[1] > min_y]
+
+
+def preprocess_cell(cell_img):
+   gray = cv2.cvtColor(cell_img, cv2.COLOR_BGR2GRAY)
+   _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+   resized = cv2.resize(thresh, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
+   return resized
+
+
+def extract_text_from_cells(image, rows):
+   extracted = []
+   for row in rows:
+       row = sorted(row, key=lambda b: b[0])
+       cells = []
+       for x, y, w, h in row:
+           cell_img = preprocess_cell(image[y:y + h, x:x + w])
+           text = reader.readtext(cell_img, detail=0, paragraph=False)
+           combined = ' '.join(text).strip()
+           cells.append(combined)
+
+
+           # Try to deduce the parts (category, id, item no)
+       category = cells[0]
+       cat_id = cells[1] if len(cells) > 1 else ''
+       item_no = ''.join(filter(str.isdigit, ' '.join(cells[2:]))) if len(cells) > 2 else ''
+
+
+       if not category.lower().strip().startswith("example"):
+           extracted.append({
+               'Category': category,
+               'Category ID': cat_id,
+               'Item Number': item_no
+           })
+   return extracted
+
+
+def process_image(image_path, out_path):
+   image = cv2.imread(image_path)
+   if image is None:
+       raise FileNotFoundError(f"Image not found at {image_path}")
+   badge_id = detect_badge_id(image)
+   print(f"Extracted Badge ID: {badge_id}")
+   boxes = detect_table_cells(image)
+   boxes = filter_valid_boxes(boxes, min_y=450)
+   print(f"Found {len(boxes)} boxes")
+
+
+   # 🔥 Split left and right tables before grouping rows
+   left_boxes, right_boxes = split_tables_by_x_gap(boxes)
+
+
+   left_rows = group_cells_by_rows(left_boxes)
+   right_rows = group_cells_by_rows(right_boxes)
+   tables = [left_rows, right_rows]
+
+
+   for table_idx, rows in enumerate(tables):
+       for row_idx, row in enumerate(rows):
+           if not row:
+               continue
+           x_min = min([x for (x, _, _, _) in row])
+           y_min = min([y for (_, y, _, _) in row])
+           x_max = max([x + w for (x, _, w, _) in row])
+           y_max = max([y + h for (_, y, _, h) in row])
+
+
+           color = (0, 255, 0) if table_idx == 0 else (255, 0, 0)  # Green for left, Blue for right
+           cv2.rectangle(image, (x_min, y_min), (x_max, y_max), color, 2)
+   cv2.imwrite(out_path, image)
+   all_extracted = []
+   for table_idx, rows in enumerate(tables):
+       print(f"Table {table_idx + 1}: {len(rows)} rows")
+       extracted = extract_text_from_cells(image, rows)
+       all_extracted.extend(extracted)
+
+
+   return all_extracted
+
+
+if __name__ == "__main__":
+   input_path = "/Users/katherinexu/Downloads/TechBloom-main/testCases/CamScannerTests/asdf11.jpg"
+   output_path = "/Users/katherinexu/Downloads/TechBloom-main/testCases/CamScannerTests/aannotatted_table_cells.jpg"
+   results = process_image(input_path, output_path)
+   for row in results:
+       print(row)
+
