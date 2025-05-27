@@ -226,7 +226,7 @@ def process_image(image_path, out_path):
    print(f"Found {len(boxes)} boxes")
 
 
-   # 🔥 Split left and right tables before grouping rows
+   # Split left and right tables before grouping rows
    left_boxes, right_boxes = split_tables_by_x_gap(boxes)
 
 
