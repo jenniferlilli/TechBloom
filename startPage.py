@@ -8,10 +8,9 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import Text
 
-from ocr_utilsT import extract_text_from_upload, extract_text_from_region
+from easy_ocr import process_image
 from io import BytesIO
 import zipfile
-from ocr_utilsT import extract_text_from_upload
 from flask import jsonify
 from botocore.exceptions import NoCredentialsError, ClientError
 
@@ -150,7 +149,7 @@ def upload_files():
         if file and allowed_file(file.filename):
             image_data = file.read()
             try:
-                text = extract_text_from_upload(image_data)
+                text = process_image(image_data)
                 return jsonify({'text': text})
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
@@ -206,7 +205,7 @@ def upload_files():
                                     image_stream = BytesIO(s3_bytes)
                                     print(type(s3_bytes))
                                     print(len(s3_bytes))
-                                    text = extract_text_from_upload(image_stream)
+                                    text = process_image(image_stream)
                                     print(f"OCR result for {inner_filename}:\n{text}\n")
                                     db_session.add(OCRResult(
                                         session_id=session_id,

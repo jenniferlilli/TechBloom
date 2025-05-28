@@ -27,8 +27,8 @@ def init_db():
         c.execute('''
             CREATE TABLE IF NOT EXISTS votes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ballot_id INTEGER,
                 category TEXT,
+                category_id TEXT,
                 choice TEXT,
                 FOREIGN KEY(ballot_id) REFERENCES ballots(id)
             )
@@ -61,11 +61,11 @@ def update_ballot_status(ballot_id, status):
         c.execute('UPDATE ballots SET status = ? WHERE id = ?', (status, ballot_id))
         conn.commit()
 
-def insert_vote(ballot_id, category, choice):
+def insert_vote(category, category_id, choice):
     with closing(get_connection()) as conn:
         c = conn.cursor()
         c.execute(
-            'INSERT INTO votes (ballot_id, category, choice) VALUES (?, ?, ?)',
-            (ballot_id, category, choice)
+            'INSERT INTO votes (category, category_id, choice) VALUES (?, ?, ?)',
+            (category, category_id, choice)
         )
         conn.commit()
