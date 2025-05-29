@@ -7,7 +7,7 @@ import re
 from PIL import Image
 import os
 import uuid
-from db_utils import insert_vote, insert_ballot
+from db_utils import insert_vote, insert_badge, insert_category
 from io import BytesIO
 
 reader = easyocr.Reader(['en'])
@@ -320,7 +320,7 @@ def extract_text_from_cells(image, rows):
 
     return extracted
 
-def process_image(image_bytes):
+def process_image(image_bytes, session_id: str, ballot_id: str):
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     image_np = np.array(image)
     image_cv = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
@@ -328,6 +328,9 @@ def process_image(image_bytes):
     image_cv = deskew_image(image_cv)
     badge_id = detect_badge_id(image_cv)
     print(f"Extracted Badge ID: {badge_id}")
+    if badge_id:
+        insert_badge(session_id, badge_id)
+
     boxes = detect_table_cells(image_cv)
     boxes = filter_valid_boxes(boxes, min_y=450)
     print(f"Found {len(boxes)} boxes")
@@ -351,8 +354,16 @@ def process_image(image_bytes):
             cv2.rectangle(image_cv, (x_min, y_min), (x_max, y_max), color, 2)
     all_extracted = []
     for table_idx, rows in enumerate(tables):
-        print(f"Table {table_idx + 1}: {len(rows)} rows")
-        extracted = extract_text_from_cells(image_cv, rows)
-        all_extracted.extend(extracted)
+        for row in rows:
+            if not row:
+                continue
+        extracted_cells = extract_text_from_cells(image_cv, [rows])
+        for item in extracted_cells:
+            category_name=item['Category']
+            category_id=item['Category ID']
+            vote=item['Item Number']
+            insert_category(category_id, category_name)
+            insert_vote(category_id, vote)
+            all_extracted.append(item)
 
     return all_extracted

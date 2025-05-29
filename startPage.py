@@ -1,58 +1,17 @@
-# http://localhost:5000/login sigh
 import os, uuid, boto3
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from werkzeug.utils import secure_filename
 
-from sqlalchemy import create_engine, Column, Integer, String, LargeBinary
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import Text
+from db_model import (
+    ValidBadgeIDs, Ballot, UploadedZip, UserSession, OCRResult,
+    BallotCategory, BallotVotes, SessionLocal
+)
 
 from easy_ocr import process_image
 from io import BytesIO
 import zipfile
 from flask import jsonify
 from botocore.exceptions import NoCredentialsError, ClientError
-
-# sql setup
-Base = declarative_base()
-joinedSession = False
-
-
-class BadgeID(Base):
-    __tablename__ = 'badge_ids'
-    id = Column(Integer, primary_key=True)
-    session_id = Column(String)
-    badge_id = Column(String)
-
-
-class UploadedZip(Base):
-    __tablename__ = 'uploaded_zips'
-    id = Column(Integer, primary_key=True)
-    session_id = Column(String)
-    filename = Column(String)
-    zip_data = Column(LargeBinary)
-
-
-class UserSession(Base):
-    __tablename__ = 'user_sessions'
-    id = Column(Integer, primary_key=True)
-    session_id = Column(String, unique=True)
-    password = Column(String)
-
-
-class OCRResult(Base):
-    __tablename__ = 'ocr_results'
-    id = Column(Integer, primary_key=True)
-    session_id = Column(String)
-    filename = Column(String)
-    extracted_text = Column(Text)
-
-
-engine = create_engine('sqlite:///data.db')
-Base.metadata.create_all(engine)
-DBSession = sessionmaker(bind=engine)
-db_session = DBSession()
 
 s3 = boto3.client('s3')
 bucket_name = 'techbloom-ballots'
@@ -62,7 +21,8 @@ app.secret_key = 'secret-key'
 ALLOWED_BADGE_EXTENSIONS = {'csv', 'txt'}
 ALLOWED_ZIP_EXTENSIONS = {'zip'}
 
-
+def get_db_session():
+    return SessionLocal()
 
 def upload_to_s3(file_obj, bucket, key):
     try:
@@ -73,52 +33,53 @@ def upload_to_s3(file_obj, bucket, key):
         print(f"Upload failed: {e}")
         return False
 
-
-
 def allowed_file(filename, allowed_extensions):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
-
-
 
 def is_junk_file(file_info):
     filename = file_info.filename
     basename = os.path.basename(filename)
 
     return (
-        filename.startswith('__MACOSX/') or           # macOS archive metadata
-        '/__MACOSX/' in filename or                   # Catch nested __MACOSX
-        basename.startswith('._') or                  # macOS resource forks
-        basename.startswith('.') or                   # Hidden files (Linux/macOS)
-        basename in ('Thumbs.db', 'desktop.ini') or   # Windows metadata files
-        file_info.is_dir() or                         # Directories
-        not basename.strip()                          # Empty or whitespace-only names
+        filename.startswith('__MACOSX/') or
+        '/__MACOSX/' in filename or
+        basename.startswith('._') or
+        basename.startswith('.') or
+        basename in ('Thumbs.db', 'desktop.ini') or
+        file_info.is_dir() or
+        not basename.strip()
     )
-
 
 @app.route('/login')
 def login():
     return render_template('login.html')
-
 
 @app.route('/create-session', methods=['GET', 'POST'])
 def create_session():
     if request.method == 'POST':
         password = request.form.get('password')
         session_id = str(uuid.uuid4())[:8]
+
+        db_session = get_db_session()
         db_session.add(UserSession(session_id=session_id, password=password))
         db_session.commit()
+        db_session.close()
+
         session['session_id'] = session_id
         flash(f'Generated Session ID: {session_id}')
         return redirect(url_for('upload_files'))
     return render_template('createSession.html')
-
 
 @app.route('/join-session', methods=['GET', 'POST'])
 def join_session():
     if request.method == 'POST':
         session_id = request.form.get('session_id')
         password = request.form.get('password')
+
+        db_session = get_db_session()
         user_session = db_session.query(UserSession).filter_by(session_id=session_id, password=password).first()
+        db_session.close()
+
         if user_session:
             session['session_id'] = session_id
             session['joined_existing'] = True
@@ -136,17 +97,17 @@ def upload_files():
         flash('Please log in or create a session first.')
         return redirect(url_for('login'))
 
+    db_session = get_db_session()
     joined_existing = session.get('joined_existing', False)
-    existing_badges = db_session.query(BadgeID).filter_by(session_id=session_id).first()
+    existing_badges = db_session.query(ValidBadgeIDs).filter_by(session_id=session_id).first()
     existing_zip = db_session.query(UploadedZip).filter_by(session_id=session_id).first()
 
-    # Handle raw image OCR API (likely JS frontend)
     if request.method == 'POST' and 'file' in request.files and len(request.files) == 1:
         file = request.files['file']
         if file.filename == '':
             return jsonify({'error': 'No selected file'}), 400
 
-        if file and allowed_file(file.filename):
+        if file and allowed_file(file.filename, {'png', 'jpg', 'jpeg'}):
             image_data = file.read()
             try:
                 text = process_image(image_data)
@@ -156,7 +117,6 @@ def upload_files():
         else:
             return jsonify({'error': 'Unsupported file format'}), 400
 
-    # Handle full form POST with badge and zip
     if request.method == 'POST':
         badgeFile = request.files.get('badge_file')
         zipFile = request.files.get('zip_file')
@@ -174,7 +134,7 @@ def upload_files():
             for line in badge_lines:
                 badge_id = line.strip()
                 if badge_id:
-                    db_session.add(BadgeID(session_id=session_id, badge_id=badge_id))
+                    db_session.add(ValidBadgeIDs(session_id=session_id, badge_id=badge_id))
             db_session.commit()
         elif badgeFile:
             flash('Invalid badge file. Must be .csv or .txt')
@@ -183,7 +143,7 @@ def upload_files():
         if zipFile and allowed_file(zipFile.filename, ALLOWED_ZIP_EXTENSIONS):
             filename = secure_filename(zipFile.filename)
             zip_bytes = zipFile.read()
-            db_session.add(UploadedZip(session_id=session_id, filename=filename, zip_data=zip_bytes))
+            db_session.add(UploadedZip(session_id=session_id, filename=filename))
             db_session.commit()
 
             zip_stream = BytesIO(zip_bytes)
@@ -191,7 +151,7 @@ def upload_files():
                 for file_info in archive.infolist():
                     inner_filename = file_info.filename
                     if is_junk_file(file_info):
-                        continue  # Skip junk files
+                        continue
 
                     if inner_filename.lower().endswith(('.png', '.jpg', '.jpeg')):
                         with archive.open(file_info) as image_file:
@@ -203,10 +163,7 @@ def upload_files():
                                     s3_object = s3.get_object(Bucket=bucket_name, Key=key)
                                     s3_bytes = s3_object['Body'].read()
                                     image_stream = BytesIO(s3_bytes)
-                                    print(type(s3_bytes))
-                                    print(len(s3_bytes))
                                     text = process_image(image_stream)
-                                    print(f"OCR result for {inner_filename}:\n{text}\n")
                                     db_session.add(OCRResult(
                                         session_id=session_id,
                                         filename=inner_filename,
@@ -231,9 +188,11 @@ def dashboard():
         flash('Please log in or create a session first.')
         return redirect(url_for('login'))
 
-    badge_ids = db_session.query(BadgeID).filter_by(session_id=session_id).all()
+    db_session = get_db_session()
+    badge_ids = db_session.query(ValidBadgeIDs).filter_by(session_id=session_id).all()
     uploaded_zips = db_session.query(UploadedZip).filter_by(session_id=session_id).all()
     ocr_results = db_session.query(OCRResult).filter_by(session_id=session_id).all()
+
     return render_template('dashboard.html',
                            badge_ids=[b.badge_id for b in badge_ids],
                            zip_filenames=[z.filename for z in uploaded_zips],
