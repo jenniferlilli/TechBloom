@@ -1,4 +1,4 @@
-import os, uuid, boto3
+import os, uuid, boto3, json
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from werkzeug.utils import secure_filename
 
@@ -167,7 +167,7 @@ def upload_files():
                                     db_session.add(OCRResult(
                                         session_id=session_id,
                                         filename=inner_filename,
-                                        extracted_text=text
+                                        extracted_text=json.dumps(text)
                                     ))
                                 except Exception as e:
                                     print(f"Failed to process {inner_filename}: {e}")

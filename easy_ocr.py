@@ -362,7 +362,6 @@ def process_image(image_bytes, session_id: str):
 
             color = (0, 255, 0) if table_idx == 0 else (255, 0, 0)  # Green for left, Blue for right
             cv2.rectangle(image_cv, (x_min, y_min), (x_max, y_max), color, 2)
-    cv2.imwrite('/Users/katherinexu/Downloads/TechBloom-main/testCases/CamScannerTests/testtttt.jpg', image_cv)
     all_extracted = []
     for table_idx, rows in enumerate(tables):
         for row in rows:
