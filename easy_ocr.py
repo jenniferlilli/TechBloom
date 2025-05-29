@@ -1,5 +1,3 @@
-import io
-
 import cv2
 import numpy as np
 import easyocr
@@ -197,7 +195,11 @@ def detect_table_cells(image):
 
     boxes = []
     for cnt in contours:
-        x, y, w, h = cv2.boundingRect(cnt)
+        try:
+            x, y, w, h = cv2.boundingRect(cnt)
+        except Exception as e:
+            print("Skipping contour due to error:", e)
+            continue
         if 40 < w < 800 and 20 < h < 100:
             boxes.append((x, y, w, h))
 
@@ -293,11 +295,18 @@ def extract_digits(cell_img, save_dir="normalized_digits"):
 def extract_text_from_cells(image, rows):
     extracted = []
     for row in rows:
-        row = sorted(row, key=lambda b: b[0])
+        # row is a list of boxes: (x, y, w, h)
+        row = sorted(row, key=lambda b: b[0])  # sort left to right
+
         cells = []
-        for i, (x, y, w, h) in enumerate(row):
+        for i, box in enumerate(row):
+            if len(box) != 4:
+                print(f"[!] Skipping malformed box: {box}")
+                continue
+            x, y, w, h = box
             cell_img = image[y:y + h, x:x + w]
-            if i == 2:  # Assume 3rd column is the 3-digit number
+
+            if i == 2:  # 3rd column is the 3-digit number
                 processed = preprocess_cell(cell_img)
                 item_number = extract_digits(processed)
                 cells.append(item_number)
@@ -311,6 +320,7 @@ def extract_text_from_cells(image, rows):
         cat_id = cells[1] if len(cells) > 1 else ''
         item_no = cells[2] if len(cells) > 2 else ''
 
+        # Filter out rows starting with "example"
         if not category.lower().strip().startswith("example"):
             extracted.append({
                 'Category': category,
@@ -320,8 +330,8 @@ def extract_text_from_cells(image, rows):
 
     return extracted
 
-def process_image(image_bytes, session_id: str, ballot_id: str):
-    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+def process_image(image_bytes, session_id: str):
+    image = Image.open(image_bytes).convert("RGB")
     image_np = np.array(image)
     image_cv = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
 
@@ -352,18 +362,18 @@ def process_image(image_bytes, session_id: str, ballot_id: str):
 
             color = (0, 255, 0) if table_idx == 0 else (255, 0, 0)  # Green for left, Blue for right
             cv2.rectangle(image_cv, (x_min, y_min), (x_max, y_max), color, 2)
+    cv2.imwrite('/Users/katherinexu/Downloads/TechBloom-main/testCases/CamScannerTests/testtttt.jpg', image_cv)
     all_extracted = []
     for table_idx, rows in enumerate(tables):
         for row in rows:
             if not row:
                 continue
-        extracted_cells = extract_text_from_cells(image_cv, [rows])
-        for item in extracted_cells:
-            category_name=item['Category']
-            category_id=item['Category ID']
-            vote=item['Item Number']
-            insert_category(category_id, category_name)
-            insert_vote(category_id, vote)
-            all_extracted.append(item)
-
+            extracted_cells = extract_text_from_cells(image_cv, [row])  # pass a list with just this one row
+            for item in extracted_cells:
+                category_name = item['Category']
+                category_id = item['Category ID']
+                vote = item['Item Number']
+                insert_category(category_id, category_name)
+                insert_vote(category_id, vote)
+                all_extracted.append(item)
     return all_extracted

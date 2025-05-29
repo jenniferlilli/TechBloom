@@ -163,7 +163,7 @@ def upload_files():
                                     s3_object = s3.get_object(Bucket=bucket_name, Key=key)
                                     s3_bytes = s3_object['Body'].read()
                                     image_stream = BytesIO(s3_bytes)
-                                    text = process_image(image_stream)
+                                    text = process_image(image_stream, session_id)
                                     db_session.add(OCRResult(
                                         session_id=session_id,
                                         filename=inner_filename,

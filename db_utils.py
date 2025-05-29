@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from models import (
+from db_model import (
     UserSession, ValidBadgeIDs, UploadedZip, OCRResult,
     BallotVotes, BallotCategory, Ballot,
     SessionLocal
