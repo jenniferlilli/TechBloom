@@ -52,6 +52,7 @@ class BallotVotes(Base):
     vote = Column(String)
 
 engine = create_engine('sqlite:///data.db')
+Base.metadata.drop_all(bind=engine)
 Base.metadata.create_all(engine)
 
 SessionLocal = scoped_session(sessionmaker(bind=engine))

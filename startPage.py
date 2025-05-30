@@ -189,14 +189,32 @@ def dashboard():
         return redirect(url_for('login'))
 
     db_session = get_db_session()
-    badge_ids = db_session.query(ValidBadgeIDs).filter_by(session_id=session_id).all()
-    uploaded_zips = db_session.query(UploadedZip).filter_by(session_id=session_id).all()
-    ocr_results = db_session.query(OCRResult).filter_by(session_id=session_id).all()
 
-    return render_template('dashboard.html',
-                           badge_ids=[b.badge_id for b in badge_ids],
-                           zip_filenames=[z.filename for z in uploaded_zips],
-                           ocr_results=ocr_results)
+    # Load all needed data
+    ocr_results = db_session.query(OCRResult).filter_by(session_id=session_id).all()
+    ballots = db_session.query(Ballot).filter_by(session_id=session_id).all()
+    votes = db_session.query(BallotVotes).all()
+    categories = {c.category_id: c.category_name for c in db_session.query(BallotCategory).all()}
+
+    # Build structured result list
+    results = []
+    for ballot in ballots:
+        related_ocr = next((ocr for ocr in ocr_results if ocr.filename == ballot.name), None)
+        related_votes = [
+            {
+                "category": categories.get(v.category_id, "Unknown Category"),
+                "choice": v.vote
+            }
+            for v in votes
+        ]
+
+        results.append({
+            "image": ballot.name,
+            "badge_id": ballot.badge_id,
+            "votes": related_votes
+        })
+
+    return render_template('dashboard.html', results=results)
 
 if __name__ == '__main__':
     app.run(debug=True)
