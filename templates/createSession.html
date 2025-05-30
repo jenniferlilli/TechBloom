@@ -64,7 +64,7 @@ input {
   	 content: "";
  	 position: absolute;
  	 inset: 0;
-  	 background-color: rgba(50, 0, 35, 0.4); /* 👈 red tint, adjust as needed */
+  	 background-color: rgba(19, 11, 17, 0.4);
  	 z-index: -3;
      }
 
@@ -73,13 +73,13 @@ input {
 	padding: 18px 24px;
 	font-size: 19px;
 	width: 450px;
-	border: 2px solid #FDBFC9;
-	background-color: #FDBFC9;
+	border: 2px solid #F7ACB8;
+	background-color: #F7ACB8;
 	font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
 	color: #FFFFFF;
    	cursor: pointer;
     }
-        input[type=submit] {
+        button[type=submit] {
             background-color: #FDBFC9;
             padding: 18px 24px;
             width: 450px;
@@ -87,7 +87,13 @@ input {
             font-size: 19px;
 	    color: white;
             cursor: pointer;
+	    font-weight: bold;
+	    transition: background-color 0.4s ease, border-color 0.4s ease;
 }
+     button[type="submit"]:hover {
+    	background-color: #d8999e;
+    	border-color: #d8999e; 
+    }
 
     input[type=password]{
             padding: 18px 24px;
