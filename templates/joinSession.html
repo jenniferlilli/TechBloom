@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <html>
-<head>
+<head><title>Join Session</title></head>
+<link href='https://fonts.googleapis.com/css?family=Segoe UI' rel='stylesheet'>
     <title>Join Session</title>
     <style>
         body {
-            font-family: Tahoma;
+	        font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
             text-align: center;
             padding: 40px;
         }
@@ -13,36 +14,38 @@
             position: absolute;
             top: 50%;
             left: 50%;
-            transform: translate(-50%, -94%);
-            height: 350px;
-            width: 450px;
+            transform: translate(-50%, -50%);
+            height: 500px;
+            width: 600px;
             z-index: -1;
             background-color: #FFF1F5;
-            border-radius: 40px;
-            border: 2px solid #363636;
+        filter: drop-shadow(0 0 0.55rem #DDC1C9);
+
         }
 
-        input {
-            border-radius: 21px;
-            padding: 12px 24px;
-            margin: 10px;
-            font-size: 16px;
-            width: 250px;
-            background-color: #FFF1F5;
-            border: 2px solid #363636;
-        }
+ input {
+    padding: 16px 24px;
+    margin: 10px;
+    font-size: 16px;
+    width: 400px;
+    border: 2px solid #FEFBFC;
+    background-color: #FEFBFC;
+}
 
         input[type=submit] {
-            background-color: #FFD2D9;
+            background-color: #FDBFC9;
             padding: 18px 24px;
-            width: 180px;
-            border-radius: 30px;
-            border: 2px solid #363636;
-            font-family: Tahoma;
-            font-size: 16px;
+            width: 450px;
+            border: 2px solid #FDBFC9;
+            font-size: 19px;
+	        color: white;
             cursor: pointer;
-        }
+}
 
+       input::placeholder {
+        font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+        
         ul.flashes {
             color: red;
             list-style: none;
@@ -63,17 +66,14 @@
 <body>
     <div class="square"></div>
 
-    <h1 style="margin-bottom: 90px">Join an Existing Session</h1>
+    <h1 style="margin-top: 260px; margin-bottom: 30px; font-size:30px; color: #300F18">Join an Existing Session</h1>
 
     <form method="POST">
-        <p style="margin-bottom: 1px;">Session ID</p>
-        <input type="text" name="session_id" placeholder="Enter here" required><br>
-
-        <p style="margin-bottom: 1px; margin-top: 1px;">Password</p>
-        <input type="password" name="password" placeholder="Enter here" required><br>
+        <input type="text" name="session_id" placeholder="session ID" required style="margin-bottom: 15px;"><br>
+        <input type="password" name="password" placeholder="session password" required style="margin-bottom: 20px;"><br>
 
         <div style="display: flex; flex-direction: column; align-items: center; gap: 20px;">
-            <input type="submit" value="Join Session">
+            <input type="submit" value="Login">
         </div>
 
         <!-- invalid message -->
