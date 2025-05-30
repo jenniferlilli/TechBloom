@@ -190,22 +190,27 @@ def dashboard():
 
     db_session = get_db_session()
 
-    # Load all needed data
-    ocr_results = db_session.query(OCRResult).filter_by(session_id=session_id).all()
+    # Load all ballots for the session
     ballots = db_session.query(Ballot).filter_by(session_id=session_id).all()
+
+    # Load all votes and categories in one go to avoid querying in a loop
     votes = db_session.query(BallotVotes).all()
     categories = {c.category_id: c.category_name for c in db_session.query(BallotCategory).all()}
 
-    # Build structured result list
+    # Organize votes by ballot_id for faster lookup
+    votes_by_ballot = {}
+    for vote in votes:
+        votes_by_ballot.setdefault(vote.ballot_id, []).append(vote)
+
+    # Prepare results
     results = []
     for ballot in ballots:
-        related_ocr = next((ocr for ocr in ocr_results if ocr.filename == ballot.name), None)
         related_votes = [
             {
                 "category": categories.get(v.category_id, "Unknown Category"),
                 "choice": v.vote
             }
-            for v in votes
+            for v in votes_by_ballot.get(ballot.id, [])
         ]
 
         results.append({
