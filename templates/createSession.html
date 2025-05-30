@@ -4,12 +4,21 @@
 <link href='https://fonts.googleapis.com/css?family=Segoe UI' rel='stylesheet'>
 <style>
     body{
-	font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+	font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;	
 	text-align: center;
 	padding: 40px;
+
+	    background-image: url("../static/lillies.png");
+	    background-repeat:no-repeat;
+	    margin: 0;
+	    overflow: hidden;
+ 	    height: 100vh;
+            background-position: center;
+  	    background-size: cover;
+	    background-attachment: fixed;
     }
 
-      .square {
+        .square {
             position: absolute;
             top: 50%;
             left: 50%;
@@ -17,10 +26,20 @@
             height: 500px;
             width: 600px;
             z-index: -1;
+	    border-radius: 15px;
             background-color: #FFF1F5;
-        filter: drop-shadow(0 0 0.55rem #DDC1C9);
+            filter: drop-shadow(0 0 0.55rem #CAB0B8);
+	    box-sizing: border-box;
+
+	    text-align: center;
+            display: flex;
+	    flex-direction: column;
+	    align-items: center;
+	    gap: 20px;
+
 
         }
+
 input {
     padding: 16px 24px;
     margin: 10px;
@@ -30,10 +49,29 @@ input {
     background-color: #FEFBFC;
 }
 
+     body::before {
+  	content: "";
+ 	position: absolute;
+  	inset: 0;
+  	background-image: url('your-image.jpg');
+  	background-size: cover;
+  	background-position: center;
+  	background-repeat: no-repeat;
+ 	z-index: -2;
+    }
+
+    body::after {
+  	 content: "";
+ 	 position: absolute;
+ 	 inset: 0;
+  	 background-color: rgba(50, 0, 35, 0.4); /* 👈 red tint, adjust as needed */
+ 	 z-index: -3;
+     }
+
 
     button {
 	padding: 18px 24px;
-	font-size: 16px;
+	font-size: 19px;
 	width: 450px;
 	border: 2px solid #FDBFC9;
 	background-color: #FDBFC9;
@@ -41,8 +79,6 @@ input {
 	color: #FFFFFF;
    	cursor: pointer;
     }
-
-
         input[type=submit] {
             background-color: #FDBFC9;
             padding: 18px 24px;
@@ -56,16 +92,15 @@ input {
     input[type=password]{
             padding: 18px 24px;
 	    width: 400px;
-	    border: 2px solid #FDBFC9
+	    border: 2px solid #FEFBFC;
             margin: 10px;
             font-size: 16px;
-            cursor: pointer;
-
     }
 
        input::placeholder {
-            font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif";
+            font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
     }
+
     ul {
         color: red;
         list-style: none;
@@ -74,17 +109,16 @@ input {
 <body>
     <div class="square"></div>
 
-    <h1 style="margin-top: 260px; margin-bottom: 65px; font-size:30px; color: #300F18">Create a  New Session</h1>
+    <h1 style="margin-top: 280px; margin-bottom: 60px; font-size:30px; color: #300F18">Create a  New Session</h1>
 
     <form method="POST" action = "{{ url_for('upload_files') }}">
-        <input type="password" name="password" placeholder="enter password" required><br><br>
+        <input type="password" name="password" placeholder="Enter Password" required><br><br>
 	<div style="display:flex; flex-direction:column; align-items:center; gap:20px;">
             <button type="submit">Create Session</button>
 	</div>
     </form>
-
 <!-- logo at the bottom of the screen -->
-    <img src="{{ url_for('static', filename='logo.png') }}" id="bottom-logo">
+    <img src="{{ url_for('static', filename='light_logo.png') }}" id="bottom-logo">
     <style>
         #bottom-logo {
             position: fixed;
