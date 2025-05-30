@@ -117,7 +117,7 @@ input {
 
     <h1 style="margin-top: 280px; margin-bottom: 60px; font-size:30px; color: #300F18">Create a  New Session</h1>
 
-    <form method="POST" action = "{{ url_for('upload_files') }}">
+    <form method="POST" action="{{ url_for('create_session') }}">
         <input type="password" name="password" placeholder="Enter Password" required><br><br>
 	<div style="display:flex; flex-direction:column; align-items:center; gap:20px;">
             <button type="submit">Create Session</button>
