@@ -28,3 +28,6 @@ don't follow terminal link...go to: http://localhost:5000/login
 # Aesthetics:
 
 shade used: #f1dada
+#d8999e
+#FDBFC9
+#FEFBFC
