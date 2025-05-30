@@ -1,66 +1,71 @@
 <!DOCTYPE html>
 <html>
 <head><title>Create Session</title></head>
+<link href='https://fonts.googleapis.com/css?family=Segoe UI' rel='stylesheet'>
 <style>
     body{
-        font-family: Tahoma;
+	font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
 	text-align: center;
 	padding: 40px;
     }
-    .square {
-      height: 500px;
-      width: 500px;
-      background-color: #f1dada;
 
-    }
-    .square {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -94%);
-        height: 350px;
-        width: 450px;
-        z-index: -1;
-        background-color: #FFF1F5;
-        border-radius: 40px;
-	border: 2px solid #363636;
-    }
-    input {
-       border-radius: 21px;
-       padding: 10px;
-       border: 2px solid #363636;
-       width: 250px;
-       background-color: #FFF1F5;
+      .square {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            height: 500px;
+            width: 600px;
+            z-index: -1;
+            background-color: #FFF1F5;
+        filter: drop-shadow(0 0 0.55rem #DDC1C9);
+
+        }
+input {
+    padding: 16px 24px;
+    margin: 10px;
+    font-size: 16px;
+    width: 400px;
+    border: 2px solid #FEFBFC;
+    background-color: #FEFBFC;
+}
+
+
+    button {
+	padding: 18px 24px;
+	font-size: 16px;
+	width: 450px;
+	border: 2px solid #FDBFC9;
+	background-color: #FDBFC9;
+	font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+	color: #FFFFFF;
+   	cursor: pointer;
     }
 
-    .button-group
-            margin-bottom: 20px;
-    }
 
-    .button-group button {
-            padding: 12px 24px;
-            margin: 10px;
-            font-size: 16px;
+        input[type=submit] {
+            background-color: #FDBFC9;
+            padding: 18px 24px;
+            width: 450px;
+            border: 2px solid #FDBFC9;
+            font-size: 19px;
+	    color: white;
             cursor: pointer;
-    }
-    input{
-	padding: 12px 24px;
-	margin: 10px;
-            font-size: 16px;
-	width: 250px;
-    }
+}
+
     input[type=password]{
-            padding: 12px 24px;
+            padding: 18px 24px;
+	    width: 400px;
+	    border: 2px solid #FDBFC9
             margin: 10px;
             font-size: 16px;
             cursor: pointer;
 
     }
-    input[type=submit]{
-	    background-color: #f1dada
+
+       input::placeholder {
+            font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif";
     }
-
-
     ul {
         color: red;
         list-style: none;
@@ -69,19 +74,15 @@
 <body>
     <div class="square"></div>
 
-    <h1 style="margin-bottom: 30px">Create a New Session</h1>
-    <p style="margin-bottom: 1px;">Session Password</p>
+    <h1 style="margin-top: 260px; margin-bottom: 65px; font-size:30px; color: #300F18">Create a  New Session</h1>
 
-    <form method="POST">
-        <input type="password" name="password" placeholder="Enter here" required><br><br>
-
-
+    <form method="POST" action = "{{ url_for('upload_files') }}">
+        <input type="password" name="password" placeholder="enter password" required><br><br>
 	<div style="display:flex; flex-direction:column; align-items:center; gap:20px;">
-        <a href="{{ url_for('upload_files') }}">
-            <button style="padding:18px 24px; font-size: 16px; width:180px; border-radius:30px; border: 2px solid #363636; background-color: #FFD2D9; font-family:Tahoma  ;  ">Create Session</button>
-        </a>
-
+            <button type="submit">Create Session</button>
+	</div>
     </form>
+
 <!-- logo at the bottom of the screen -->
     <img src="{{ url_for('static', filename='logo.png') }}" id="bottom-logo">
     <style>
