@@ -117,12 +117,13 @@
     	<h1 style="margin-top: 275px; margin-bottom: 40px; font-size:30px; color: #300F18">
 	    Join an Existing Session
 	</h1>
-
-    	<form method="POST">
+	
+	<form method="POST" action="{{ url_for('join_session') }}">
 
             <input type="text" name="session_id" placeholder="Session ID" required style="margin-bottom: 15px;"><br>
             <input type="password" name="password" placeholder="Session Password" required style="margin-bottom: 20px;"><br>
             <input type="submit" value="Login">
+
 
 
         <!-- invalid message -->
