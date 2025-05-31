@@ -1,8 +1,8 @@
+
 <!DOCTYPE html>
 <html>
-<head>
+<head><title>Join Session</title></head>
 <link href='https://fonts.googleapis.com/css?family=Segoe UI' rel='stylesheet'>
-    <title>Login - Create or Join Session</title>
     <style>
         body {
 	    font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -17,55 +17,91 @@
             background-position: center;
   	    background-size: cover;
 	    background-attachment: fixed;
-        }
+       }
 
-    .button-group {
-    	display: flex;
-    	flex-direction: column;
-    	align-items: center;
-    	gap: 10px;
+     body::before {
+  	content: "";
+ 	position: absolute;
+  	inset: 0;
+  	background-image: url('your-image.jpg');
+  	background-size: cover;
+  	background-position: center;
+  	background-repeat: no-repeat;
+ 	z-index: -2;
     }
 
+    body::after {
+  	 content: "";
+ 	 position: absolute;
+ 	 inset: 0;
+  	 background-color: rgba(19, 11, 17, 0.4);
+ 	 z-index: -3;
+     }
+
+
+        .square {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            height: 500px;
+            width: 600px;
+            z-index: -1;
+	    border-radius: 15px;
+            background-color: #FFF1F5;
+            filter: drop-shadow(0 0 0.55rem #CAB0B8);
+	    box-sizing: border-box;
+
+	    text-align: center;
+            display: flex;
+	    flex-direction: column;
+	    align-items: center;
+	    gap: 20px;
+
+        }
+
+     input {
+      	padding: 16px 24px;
+  	margin: 10px 0;
+    	font-size: 16px;
+    	width: 90%;
+   	max-width: 450px;
+    	border: 2px solid #FEFBFC;
+    	background-color: #FEFBFC;
+    	box-sizing: border-box;
+     }
+
+
         input[type=submit] {
-            background-color: #F5AEB9;
-            padding: 16px 24px;
-            width: 275px;
-	    height: 65px;
-            border: 2px solid #F5AEB9;
-            font-size: 18px;
-            font-weight: bold;
+            background-color: #FDBFC9;
+            padding: 18px 24px;
+            width: 450px;
+            border: 2px solid #FDBFC9;
+            font-size: 19px;
 	    color: white;
             cursor: pointer;
+	    font-weight: bold;
             transition: background-color 0.4s ease, border-color 0.4s ease;
 	}
 
     input[type="submit"]:hover {
-    	background-color: #E28C9A;
-    	border-color: #E28C9A; 
+    	background-color: #d8999e;
+    	border-color: #d8999e; 
     }
+        input::placeholder {
+            font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+	}
 
-        ul {
+    	
+
+        ul.flashes {
             color: red;
             list-style: none;
+            padding: 0;
+            margin-top: 50px;
+            font-weight: bold;
         }
-    </style>
-</head>
-<body>
-    <h1 style="margin-top: 250px;margin-bottom: 10px; font-size: 50px; color: #300F18; text-align: center;">ICAST Showcase Results</h1>
-    <p style = "margin-top: 16px; margin-bottom: 28px; color: #61162C; font-size: 16px; text-align: center"> Create a new session or join an existing session to begin. </p>
 
-
-    <div class="button-group">
-	<form action="{{ url_for('create_session') }}" method="get">
-            <input type="submit" value="Create New Session" style="margin-bottom: 7px; align-items: center"></button>
-	</form>
-	<form action="{{ url_for('join_session') }}">
-            <input type="submit" value="Join Existing Session" style=align-items: center></button>	
-	</form>
-    </div>
-<!-- logo at the bottom of the screen -->
-    <img src="{{ url_for('static', filename='home_logo.png') }}" id="bottom-logo">
-    <style>
         #bottom-logo {
             position: fixed;
             bottom: 10px;
@@ -74,6 +110,32 @@
             opacity: 0.9;
         }
     </style>
+</head>
+<body>
+    <div class="bg"></div>
+    <div class="square"></div>
+    	<h1 style="margin-top: 275px; margin-bottom: 40px; font-size:30px; color: #300F18">
+	    Join an Existing Session
+	</h1>
 
+	<form method="POST" action="{{ url_for('join_session') }}">
+
+            <input type="text" name="session_id" placeholder="Session ID" required style="margin-bottom: 15px;"><br>
+            <input type="password" name="password" placeholder="Session Password" required style="margin-bottom: 20px;"><br>
+            <input type="submit" value="Login">
+
+
+        <!-- invalid message -->
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <ul class="flashes">
+                    {% for message in messages %}
+                        <li>{{ message }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
+    </form>
+    <img src="{{ url_for('static', filename='light_logo.png') }}" id="bottom-logo">
 </body>
 </html>
