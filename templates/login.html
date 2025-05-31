@@ -51,16 +51,16 @@
     </style>
 </head>
 <body>
-    <h1 style="margin-top: 250px;margin-bottom: 10px; font-size: 50px; color: #300F18">ICAST Showcase Results</h1>
-    <p style = "margin-top: 16px; margin-bottom: 28px; color: #61162C; font-size: 16px"> Create a new session or join an existing session to begin. </p>
+    <h1 style="margin-top: 250px;margin-bottom: 10px; font-size: 50px; color: #300F18; text-align: center;">ICAST Showcase Results</h1>
+    <p style = "margin-top: 16px; margin-bottom: 28px; color: #61162C; font-size: 16px; text-align: center"> Create a new session or join an existing session to begin. </p>
 
 
     <div class="button-group">
 	<form action="{{ url_for('create_session') }}" method="get">
-            <input type="submit" value="Create New Session" style="margin-bottom: 7px"></button>
+            <input type="submit" value="Create New Session" style="margin-bottom: 7px; align-items: center"></button>
 	</form>
 	<form action="{{ url_for('join_session') }}">
-            <input type="submit" value=Join "Existing Session"></button>	
+            <input type="submit" value="Join Existing Session" style=align-items: center></button>	
 	</form>
     </div>
 <!-- logo at the bottom of the screen -->
