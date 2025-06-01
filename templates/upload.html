@@ -1,43 +1,140 @@
 <!DOCTYPE html>
 <html>
+<link href='https://fonts.googleapis.com/css?family=Segoe UI' rel='stylesheet'>
+
 <head>
     <title>Website Name Upload Site</title>
     <style>
-        body{
-	    font-family: Tahoma;
-        }
-        .drop-area {
-            border: 2px dashed #ccc;
-            width: 400px;
-            height: 180px;
-            text-align: center;
-            padding: 20px;
-            margin: 20px auto;
-            border-radius: 40px;
-            transition: background-color 0.2s, border-color 0.2s;
-        }
+    body {
+	font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+	text-align: center;
+	padding: 40px;
 
-        .drop-area.highlight {
-            border-color: #6a5acd;
-            background-color: #f0f0ff;
-        }
+	background-image: url("../static/lillies.png");
+	background-repeat:no-repeat;
+	margin: 0;
+	overflow: hidden;
+	height: 100vh;
+	background-position: center;
+	background-size: cover;
+	background-attachment: fixed;
+    }
 
-        #file-input-badge, #file-input-zip {
-            display: none;
-        }
+    body::after {
+  	 content: "";
+ 	 position: absolute;
+ 	 inset: 0;
+  	 background-color: rgba(19, 11, 17, 0.4);
+ 	 z-index: -3;
+     }
 
-        .upload-btn {
-            margin-top: 10px;
-        }
+    .square {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	height: 700px;
+	width: 900px;
+	z-index: 2;
+	border-radius: 15px;
+	background-color: #FFF1F5;
+	filter: drop-shadow(0 0 0.55rem #CAB0B8);
+	box-sizing: border-box;
 
-        ul {
-            color: red;
-            text-align: center;
-        }
+	text-align: center;
+	display: flex;
+	justify-content: center;
+	flex-direction: column;
+	align-items: center;
+	gap: 20px;
+    }
+
+
+    .drop-square{
+	display: flex;
+	justify-content: center;
+	gap: 20px;
+	flex-wrap: wrap;
+    }
+
+    .drop-area {
+	border: 2px dashed #D0B9C5;
+	width: 325px;
+	height: 300px;
+	text-align: center;
+	padding: 20px;
+	margin: 0 auto;
+	background-color: #FCEBEF;
+	transition: background-color 0.2s, border-color 0.2s;
+	border-radius: 7px;
+
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+    }
+
+    .drop-area.highlight {
+	border-color: #6A5ACD;
+	background-color: #F0F0FF;
+    }
+
+    #file-input-badge, #file-input-zip {
+	display: none;
+    }
+
+    .upload-btn {
+   	background-color: #FECCD6;
+    	color: white;
+    	font-weight: bold;
+    	padding: 9px 16px;
+    	border: 2px solid #FECCD6;
+    	border-radius: 3px;
+    	cursor: pointer;
+    	font-size: 13px;
+    	transition: background-color 0.3s ease, color 0.3s ease;
+     }
+
+    .upload-btn:hover {
+    	background-color: white;
+    	color: #F7ACB8;
+     }
+    button[type="submit"]{
+	padding: 14px 28px;
+	font-size: 19px;
+	background-color: #FDBFC9;
+	cursor: pointer;
+	border: 2px solid #FDBFC9;
+	color: white;
+	width: 300px;
+	font-weight: bold;
+	transition: color 0.4s ease, border-color 0.4s ease, background-color 0.4s ease;
+    }
+    button[type="submit"]:hover{
+	background-color: #D8999E;
+	border-color: #D8999E;
+    }
+
+
+    ul {
+	color: red;
+	text-align: center;
+    }
+
+    #bottom-logo {
+	position: fixed;
+	bottom: 10px;
+	left: 10px;
+	width: 250px;
+	opacity: 0.9;
+    }
     </style>
 </head>
 <body>
-    <h1 style="text-align: center; margin-bottom: 55px; margin-top: 70px">Upload Badge ID List and ZIP File</h1>
+    <div class="square">
+
+    <h1 style="text-align: center; margin-bottom: 20px; ">Upload Badge ID List and ZIP File</h1>
 
     {% with messages = get_flashed_messages() %}
         {% if messages %}
@@ -49,28 +146,32 @@
         {% endif %}
     {% endwith %}
 
-    <div id="drop-area-badge" class="drop-area" style="margin-bottom: 30px;">
-	<p> Badge Identification Document Upload </p>
-        <p>Drop <strong>.csv</strong> or <strong>.txt</strong> badge file here<br>or click to select</p>
+<div class="drop-square">
+ 
+    <div id="drop-area-badge" class="drop-area" style="margin-bottom: 15px;">
+	<p style="font-weight: bold; margin-bottom: 5px"> Badge Identification Document Upload </p>
+        <p style="margin-bottom: 20px">Drop <strong>.csv</strong> or <strong>.txt</strong> badge file here<br>or click to select</p>
         <input type="file" id="file-input-badge" accept=".csv,.txt">
         <button class="upload-btn" onclick="document.getElementById('file-input-badge').click()">Choose Badge File</button>
 	<p class="file-name" id="badge-file-name"></p>
     </div>
 
+
     <div id="drop-area-zip" class="drop-area">
-        <p> Ballot Files Upload </p>
-	<p>Drop <strong>.zip</strong> image file here<br>or click to select</p>
+        <p style="font-weight: bold; margin-bottom: 5px"> Ballot Files Upload </p>
+	<p style="margin-bottom: 20px">Drop <strong>.zip</strong> image file here<br>or click to select</p>
         <input type="file" id="file-input-zip" accept=".zip">
         <button class="upload-btn" onclick="document.getElementById('file-input-zip').click()">Choose ZIP File</button>
 	<p class="file-name" id="zip-file-name"></p>
     </div>
-<div style="text-align: center; margin-top: 25px;">
-    <button 
-        style="padding: 14px 28px; font-size: 16px; border-radius: 25px; background-color: #FFD2D9; color: black; border: 1.5px solid #363636; cursor: pointer;"
-        onclick="uploadFiles()"
-    >
+</div>
+
+
+<div style="text-align: center; margin-top: 10px;">
+    <button type="submit" onclick="uploadFiles()">
         Submit Files
     </button>
+
 
     {% if joined_existing %}
         <br><br>
@@ -82,6 +183,9 @@
         </button>
     {% endif %}
 </div>
+</div>
+    <img src="{{ url_for('static', filename='light_logo.png') }}" id="bottom-logo">
+
 
 	
 
@@ -158,27 +262,28 @@
             alert('Please provide both a badge file and a ZIP file.');
             return;
         }
+
         const formData = new FormData();
         formData.append('badge_file', badgeFile);
         formData.append('zip_file', zipFile);
 
         fetch("{{ url_for('upload_files') }}", {
             method: 'POST',
-            body: formData,
-            credentials: 'same-origin'  // VERY IMPORTANT for Flask session cookies
+            body: formData
         })
-        .then(async response => {
+        .then(response => {
             if (response.redirected) {
                 window.location.href = response.url;
             } else {
-                const text = await response.text();
-                alert(`Upload failed with status ${response.status}: ${text}`);
-                console.error("Server said:", text);
+                return response.text().then(data => {
+                    alert('Upload failed. Check server logs or validations.');
+                    console.log(data);
+                });
             }
         })
         .catch(error => {
             console.error('Upload error:', error);
-            alert('Upload failed due to fetch error.');
+            alert('Upload failed.');
         });
     }
 function skipUpload() {
