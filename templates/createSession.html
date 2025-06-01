@@ -3,61 +3,19 @@
 <head><title>Create Session</title></head>
 <link href='https://fonts.googleapis.com/css?family=Segoe UI' rel='stylesheet'>
 <style>
-    body{
-	font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;	
+    body {
+	font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
 	text-align: center;
 	padding: 40px;
 
-	    background-image: url("../static/lillies.png");
-	    background-repeat:no-repeat;
-	    margin: 0;
-	    overflow: hidden;
- 	    height: 100vh;
-            background-position: center;
-  	    background-size: cover;
-	    background-attachment: fixed;
-    }
-
-        .square {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            height: 500px;
-            width: 600px;
-            z-index: -1;
-	    border-radius: 15px;
-            background-color: #FFF1F5;
-            filter: drop-shadow(0 0 0.55rem #CAB0B8);
-	    box-sizing: border-box;
-
-	    text-align: center;
-            display: flex;
-	    flex-direction: column;
-	    align-items: center;
-	    gap: 20px;
-
-
-        }
-
-input {
-    padding: 16px 24px;
-    margin: 10px;
-    font-size: 16px;
-    width: 400px;
-    border: 2px solid #FEFBFC;
-    background-color: #FEFBFC;
-}
-
-     body::before {
-  	content: "";
- 	position: absolute;
-  	inset: 0;
-  	background-image: url('your-image.jpg');
-  	background-size: cover;
-  	background-position: center;
-  	background-repeat: no-repeat;
- 	z-index: -2;
+	background-image: url("../static/lillies.png");
+	background-repeat:no-repeat;
+	margin: 0;
+	overflow: hidden;
+	height: 100vh;
+	background-position: center;
+	background-size: cover;
+	background-attachment: fixed;
     }
 
     body::after {
@@ -66,6 +24,36 @@ input {
  	 inset: 0;
   	 background-color: rgba(19, 11, 17, 0.4);
  	 z-index: -3;
+     }
+
+    .square {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+        transform: translate(-50%, -50%);
+        height: 500px;
+        width: 600px;
+ 	z-index: -1;
+	border-radius: 15px;
+	background-color: #FFF1F5;
+	filter: drop-shadow(0 0 0.55rem #CAB0B8);
+	box-sizing: border-box;
+
+	text-align: center;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 20px;
+
+    }
+
+     input {
+      	padding: 16px 24px;
+  	padding: 10px;
+    	font-size: 16px;
+   	max-width: 400px;
+    	border: 2px solid #FEFBFC;
+    	background-color: #FEFBFC;
      }
 
 
@@ -79,20 +67,20 @@ input {
 	color: #FFFFFF;
    	cursor: pointer;
     }
-        button[type=submit] {
-            background-color: #FDBFC9;
-            padding: 18px 24px;
-            width: 450px;
-            border: 2px solid #FDBFC9;
-            font-size: 19px;
-	    color: white;
-            cursor: pointer;
-	    font-weight: bold;
-	    transition: background-color 0.4s ease, border-color 0.4s ease;
-}
-     button[type="submit"]:hover {
-    	background-color: #d8999e;
-    	border-color: #d8999e; 
+    button[type=submit] {
+	background-color: #FDBFC9;
+	padding: 18px 24px;
+	width: 450px;
+	border: 2px solid #FDBFC9;
+	font-size: 19px;
+	color: white;
+	cursor: pointer;
+	font-weight: bold;
+	transition: background-color 0.4s ease, border-color 0.4s ease;
+    }
+    button[type="submit"]:hover {
+    	background-color: #D8999E;
+    	border-color: #D8999E; 
     }
 
     input[type=password]{
@@ -112,6 +100,8 @@ input {
         list-style: none;
     }
 </style>
+
+
 <body>
     <div class="square"></div>
 
