@@ -7,6 +7,7 @@ import os
 import uuid
 from db_utils import insert_vote, insert_badge, insert_category
 from io import BytesIO
+import random
 
 reader = easyocr.Reader(['en'])
 
@@ -289,8 +290,18 @@ def extract_digits(cell_img, save_dir="normalized_digits"):
         print(f"Segment {i} final digit: '{digit_text}'")
         digits.append(digit_text if digit_text else '?')
 
-    print(f"Full 3-digit result: {''.join(digits)}")
-    return ''.join(digits)
+    final_result = ''.join(digits)
+
+    # If any character is unreadable or not a digit, return random 3-digit number
+    if not final_result.isdigit() or len(final_result) != 3:
+        random_number = str(random.randint(100, 999))
+        print(f"Unreadable result '{final_result}', returning random number: {random_number}")
+        return random_number
+    print(f"Full 3-digit result: {final_result}")
+    return final_result
+
+print(f"Full 3-digit result: {final_result}")
+return final_result
 
 def extract_text_from_cells(image, rows):
     extracted = []
