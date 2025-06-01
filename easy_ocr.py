@@ -300,9 +300,6 @@ def extract_digits(cell_img, save_dir="normalized_digits"):
     print(f"Full 3-digit result: {final_result}")
     return final_result
 
-print(f"Full 3-digit result: {final_result}")
-return final_result
-
 def extract_text_from_cells(image, rows):
     extracted = []
     for row in rows:
