@@ -1,6 +1,7 @@
-import os, uuid, boto3, json
+import os, uuid, boto3, json, re
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from werkzeug.utils import secure_filename
+from db_utils import get_ocr_results_by_session
 
 from db_model import (
     ValidBadgeIDs, Ballot, UploadedZip, UserSession, OCRResult,
@@ -12,6 +13,7 @@ from io import BytesIO
 import zipfile
 from flask import jsonify
 from botocore.exceptions import NoCredentialsError, ClientError
+from collections import defaultdict, Counter
 
 s3 = boto3.client('s3')
 bucket_name = 'techbloom-ballots'
@@ -183,43 +185,42 @@ def upload_files():
 
 @app.route('/dashboard')
 def dashboard():
-    session_id = session.get('session_id')
+    session_id = session.get("session_id")
     if not session_id:
-        flash('Please log in or create a session first.')
-        return redirect(url_for('login'))
+        return redirect("/login")
 
-    db_session = get_db_session()
+    ocr_results = get_ocr_results_by_session(session_id)
 
-    # Load all ballots for the session
-    ballots = db_session.query(Ballot).filter_by(session_id=session_id).all()
+    valid_categories = {
+        "A", "B", "C", "D", "E", "G", "H", "I", "J", "F",
+        "FA", "FB", "FC", "FD", "FE", "FF", "FG", "FH",
+        "K", "KB", "KC", "L", "M", "N", "O", "P", "PA",
+        "Q", "QA", "R", "RA", "S", "T", "U", "V", "W",
+        "WA", "X", "Y", "YA"
+    }
 
-    # Load all votes and categories in one go to avoid querying in a loop
-    votes = db_session.query(BallotVotes).all()
-    categories = {c.category_id: c.category_name for c in db_session.query(BallotCategory).all()}
+    item_pattern = re.compile(r"^\d{3}$") 
 
-    # Organize votes by ballot_id for faster lookup
-    votes_by_ballot = {}
-    for vote in votes:
-        votes_by_ballot.setdefault(vote.ballot_id, []).append(vote)
+    category_votes = defaultdict(Counter)
 
-    # Prepare results
-    results = []
-    for ballot in ballots:
-        related_votes = [
-            {
-                "category": categories.get(v.category_id, "Unknown Category"),
-                "choice": v.vote
-            }
-            for v in votes_by_ballot.get(ballot.id, [])
-        ]
+    for result in ocr_results:
+        try:
+            extracted_data = json.loads(result["extracted_text"])
+        except Exception:
+            continue
 
-        results.append({
-            "image": ballot.name,
-            "badge_id": ballot.badge_id,
-            "votes": related_votes
-        })
+        for entry in extracted_data:
+            category_id = entry.get("Category ID", "").strip().upper()
+            item_number = entry.get("Item Number", "").strip()
 
-    return render_template('dashboard.html', results=results)
+            if category_id in valid_categories and item_pattern.match(item_number):
+                category_votes[category_id][item_number] += 1
 
+    top_votes_per_category = {
+        category: category_votes[category].most_common(3)
+        for category in sorted(category_votes.keys())
+    }
+
+    return render_template("dashboard.html", top_votes_per_category=top_votes_per_category)
 if __name__ == '__main__':
     app.run(debug=True)

@@ -39,9 +39,9 @@ def insert_vote(category_id: str, vote: str):
         session.add(vote_obj)
         session.commit()
 
-def insert_category(category_id: str, category_name: str):
+def insert_category(category_id: str):
     with SessionLocal() as session:
-        category = BallotCategory(category_id=category_id, category_name=category_name)
+        category = BallotCategory(category_id=category_id)
         session.add(category)
         session.commit()
 
@@ -50,3 +50,7 @@ def insert_badge(session_id: str, badge_id: str):
         ballot = Ballot(session_id=session_id, badge_id=badge_id)
         session.add(ballot)
         session.commit()
+
+def get_ocr_results_by_session(session_id: str):
+    with SessionLocal() as session:
+        return session.query(OCRResult).filter_by(session_id=session_id).all()

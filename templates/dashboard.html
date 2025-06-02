@@ -1,59 +1,92 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Ballot Dashboard</title>
+    <title>Top Votes Dashboard</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            background-color: #f2f4f7;
-            margin: 0;
             padding: 20px;
         }
-        h1 {
-            color: #ff8dac;
+        h2 {
             text-align: center;
+            margin-bottom: 40px;
         }
-        .ballot {
-            background: #fff;
-            border-radius: 8px;
-            padding: 16px;
-            margin: 20px auto;
-            max-width: 600px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 20px;
         }
-        .ballot h2 {
-            color: #34495e;
+        .category-table {
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            overflow: hidden;
         }
-        .vote {
-            padding: 6px 0;
-        }
-        .label {
+        .category-title {
+            background-color: #f5f5f5;
+            text-align: center;
             font-weight: bold;
-            color: #2c3e50;
+            padding: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 8px 12px;
+            text-align: center;
+            border-top: 1px solid #ccc;
+        }
+        /* Tooltip styling */
+        .tooltip {
+            position: relative;
+            cursor: pointer;
+        }
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 80px;
+            background-color: black;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px 0;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%; 
+            left: 50%;
+            margin-left: -40px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
         }
     </style>
 </head>
 <body>
-    <h1>Ballot OCR Results</h1>
-
-    {% if results %}
-        {% for item in results %}
-            <div class="ballot">
-                <h2>Image: {{ item.image }}</h2>
-                <p class="label">Badge ID:</p>
-                <p>{{ item.badge_id }}</p>
-
-                <p class="label">Votes:</p>
-                <ul>
-                    {% for vote in item.votes %}
-                        <li class="vote">{{ vote.category }}: <strong>{{ vote.choice }}</strong></li>
+    <h2>Top 3 Items per Category</h2>
+    <div class="grid-container">
+        {% for category, top_items in top_votes_per_category.items() %}
+        <div class="category-table">
+            <div class="category-title">Category {{ category }}</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Item Number</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item, votes in top_items %}
+                    <tr>
+                        <td class="tooltip">{{ item }}
+                            <span class="tooltiptext">{{ votes }} votes</span>
+                        </td>
+                    </tr>
                     {% endfor %}
-                </ul>
-            </div>
+                </tbody>
+            </table>
+        </div>
         {% endfor %}
-    {% else %}
-        <p style="text-align:center;">No ballot results available.</p>
-    {% endif %}
+    </div>
 </body>
 </html>
