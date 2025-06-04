@@ -5,12 +5,10 @@ import boto3
 import os
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key_here'
+app.secret_key = 'secret-key'
 
-# AWS setup (replace with your credentials and bucket name)
 s3 = boto3.client('s3')
-BUCKET_NAME = 'your-bucket-name'
-
+BUCKET_NAME = techbloom-ballots
 @app.route('/review/<session_id>')
 def review_dashboard(session_id):
     with SessionLocal() as db:
