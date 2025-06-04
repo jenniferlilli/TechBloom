@@ -1,85 +1,143 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Top Votes Dashboard</title>
+    <title>OCR Dashboard - ICAST Fishing Showcase Winners</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            padding: 20px;
+            margin: 20px;
+            background: #fff;
+            color: #333;
         }
-        h2 {
+
+        h1 {
             text-align: center;
-            margin-bottom: 40px;
+            margin-bottom: 30px;
         }
+
         .grid-container {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
             gap: 20px;
         }
+
         .category-table {
             border: 1px solid #ccc;
-            border-radius: 5px;
+            border-radius: 8px;
             overflow: hidden;
+            box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
+            background-color: #fafafa;
         }
-        .category-title {
-            background-color: #f5f5f5;
+
+        .category-table h2 {
+            margin: 0;
+            background-color: #f2f2f2;
+            padding: 10px;
+            font-size: 18px;
             text-align: center;
             font-weight: bold;
-            padding: 10px;
+            border-bottom: 1px solid #ddd;
         }
+
         table {
             width: 100%;
             border-collapse: collapse;
         }
+
         th, td {
-            padding: 8px 12px;
-            text-align: center;
-            border-top: 1px solid #ccc;
+            padding: 10px;
+            border-top: 1px solid #ddd;
+            vertical-align: middle;
         }
-        /* Tooltip styling */
+
+        th {
+            background-color: #e8e8e8;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        tr:hover {
+            background-color: #f9f9f9;
+        }
+
         .tooltip {
             position: relative;
+            display: inline-block;
             cursor: pointer;
         }
+
         .tooltip .tooltiptext {
             visibility: hidden;
-            width: 80px;
-            background-color: black;
+            width: 110px;
+            background-color: #333;
             color: #fff;
             text-align: center;
             border-radius: 6px;
-            padding: 5px 0;
+            padding: 6px 8px;
             position: absolute;
             z-index: 1;
             bottom: 125%; 
             left: 50%;
-            margin-left: -40px;
+            margin-left: -55px;
             opacity: 0;
             transition: opacity 0.3s;
+            font-size: 14px;
+            pointer-events: none; 
         }
+
         .tooltip:hover .tooltiptext {
             visibility: visible;
             opacity: 1;
         }
+
+        /* Left column for medal + placement text */
+        .placement-cell {
+            width: 60px;
+            text-align: left;
+            white-space: nowrap;
+            font-weight: normal;
+            user-select: none;
+        }
+
+        /* Center item number column */
+        .item-cell {
+            text-align: center;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
-    <h2>Top 3 Items per Category</h2>
+    <h1>OCR Dashboard - ICAST Fishing Showcase Winners</h1>
     <div class="grid-container">
-        {% for category, top_items in top_votes_per_category.items() %}
+        {% for category, items in top3_per_category.items() %}
         <div class="category-table">
-            <div class="category-title">Category {{ category }}</div>
+            <h2>Category {{ category }}</h2>
             <table>
                 <thead>
                     <tr>
+                        <th></th> <!-- empty header for placement -->
                         <th>Item Number</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for item, votes in top_items %}
+                    {% for item_number, count in items %}
                     <tr>
-                        <td class="tooltip">{{ item }}
-                            <span class="tooltiptext">{{ votes }} votes</span>
+                        <td class="placement-cell">
+                            {% if loop.index == 1 %}
+                            🥇 1st
+                            {% elif loop.index == 2 %}
+                            🥈 2nd
+                            {% elif loop.index == 3 %}
+                            🥉 3rd
+                            {% else %}
+                            <!-- no placement label -->
+                            {% endif %}
+                        </td>
+                        <td class="item-cell">
+                            <span class="tooltip">
+                                {{ item_number }}
+                                <span class="tooltiptext">{{ count }} votes</span>
+                            </span>
                         </td>
                     </tr>
                     {% endfor %}

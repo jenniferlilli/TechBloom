@@ -154,7 +154,7 @@ def upload_files():
                     inner_filename = file_info.filename
                     if is_junk_file(file_info):
                         continue
-
+                    '''
                     if inner_filename.lower().endswith(('.png', '.jpg', '.jpeg')):
                         with archive.open(file_info) as image_file:
                             key = f"{session_id}/{os.path.basename(inner_filename)}"
@@ -173,6 +173,7 @@ def upload_files():
                                     ))
                                 except Exception as e:
                                     print(f"Failed to process {inner_filename}: {e}")
+                    '''
             db_session.commit()
         elif zipFile:
             flash('Invalid ZIP file.')
@@ -185,42 +186,36 @@ def upload_files():
 
 @app.route('/dashboard')
 def dashboard():
+
     session_id = session.get("session_id")
     if not session_id:
         return redirect("/login")
 
     ocr_results = get_ocr_results_by_session(session_id)
 
-    valid_categories = {
-        "A", "B", "C", "D", "E", "G", "H", "I", "J", "F",
-        "FA", "FB", "FC", "FD", "FE", "FF", "FG", "FH",
-        "K", "KB", "KC", "L", "M", "N", "O", "P", "PA",
-        "Q", "QA", "R", "RA", "S", "T", "U", "V", "W",
-        "WA", "X", "Y", "YA"
-    }
+    item_pattern = re.compile(r"^\d{3}$")
 
-    item_pattern = re.compile(r"^\d{3}$") 
-
-    category_votes = defaultdict(Counter)
+    category_votes = {}
 
     for result in ocr_results:
-        try:
-            extracted_data = json.loads(result["extracted_text"])
-        except Exception:
-            continue
+        extracted_data = result["Extracted Text"] 
 
         for entry in extracted_data:
             category_id = entry.get("Category ID", "").strip().upper()
             item_number = entry.get("Item Number", "").strip()
 
-            if category_id in valid_categories and item_pattern.match(item_number):
-                category_votes[category_id][item_number] += 1
+            if item_pattern.match(item_number):
+                if category_id not in category_votes:
+                    category_votes[category_id] = []
+                category_votes[category_id].append(item_number)
+    top3_per_category = {}
+    for category, items in category_votes.items():
+        counts = Counter(items)
+        top3 = counts.most_common(3)  
+        top3_per_category[category] = top3
 
-    top_votes_per_category = {
-        category: category_votes[category].most_common(3)
-        for category in sorted(category_votes.keys())
-    }
 
-    return render_template("dashboard.html", top_votes_per_category=top_votes_per_category)
+    return render_template("dashboard.html", top3_per_category=top3_per_category)
+
 if __name__ == '__main__':
     app.run(debug=True)
