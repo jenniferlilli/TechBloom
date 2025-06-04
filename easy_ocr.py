@@ -300,7 +300,7 @@ def extract_digits(cell_img, save_dir="normalized_digits"):
     print(f"Full 3-digit result: {final_result}")
     return final_result
     
-def extract_text_from_cells(image, rows):
+def extract_text_from_cells(image, rows, count):
     extracted = []
     CATEGORY_IDS = [
     "A", "B", "C", "D", "E", "G", "H", "I", "J", "F",
@@ -309,7 +309,6 @@ def extract_text_from_cells(image, rows):
     "Q", "QA", "R", "RA", "S", "T", "U", "V", "W",
     "WA", "X", "Y", "YA"
     ]
-    count = 0
     for row in rows:
         # row is a list of boxes: (x, y, w, h)
         row = sorted(row, key=lambda b: b[0])  # sort left to right
@@ -380,15 +379,18 @@ def process_image(image_bytes, session_id: str):
             color = (0, 255, 0) if table_idx == 0 else (255, 0, 0)  # Green for left, Blue for right
             cv2.rectangle(image_cv, (x_min, y_min), (x_max, y_max), color, 2)
     all_extracted = []
+    count = 0
     for table_idx, rows in enumerate(tables):
+        count = 0
         for row in rows:
             if not row:
                 continue
-            extracted_cells = extract_text_from_cells(image_cv, [row])  # pass a list with just this one row
+            extracted_cells = extract_text_from_cells(image_cv, [row], count)  # pass a list with just this one row
             for item in extracted_cells:
                 category_id = item['Category ID']
                 vote = item['Item Number']
                 insert_category(category_id)
                 insert_vote(category_id, vote)
                 all_extracted.append(item)
+                count += 1
     return all_extracted

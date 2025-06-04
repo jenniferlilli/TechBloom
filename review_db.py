@@ -4,26 +4,24 @@ from sqlalchemy.orm import joinedload
 import boto3
 import os
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='.')
 app.secret_key = 'secret-key'
 
 s3 = boto3.client('s3')
-BUCKET_NAME = techbloom-ballots
+BUCKET_NAME = 'techbloom-ballots'
+
 @app.route('/review/<session_id>')
 def review_dashboard(session_id):
     with SessionLocal() as db:
-        # Get unreadable votes or ballots with invalid badge_ids
         error_ballots = db.query(Ballot).filter(
             Ballot.session_id == session_id,
             (Ballot.badge_id == None) | (Ballot.badge_id == '')
         ).all()
-
         unreadable_votes = db.query(BallotVotes).join(Ballot).filter(
             Ballot.session_id == session_id,
             BallotVotes.vote == 'unreadable'
         ).options(joinedload(BallotVotes.ballot)).all()
-
-    return render_template('review.html', error_ballots=error_ballots, unreadable_votes=unreadable_votes)
+    return render_template('a_review_db.html', error_ballots=error_ballots, unreadable_votes=unreadable_votes)
 
 @app.route('/fix_badge', methods=['POST'])
 def fix_badge():
@@ -70,7 +68,6 @@ def delete_ballot(ballot_id):
                     s3.delete_object(Bucket=BUCKET_NAME, Key=ocr_result.filename)
                 except Exception as e:
                     print("Error deleting from S3:", e)
-
             db.query(BallotVotes).filter_by(ballot_id=ballot.id).delete()
             db.delete(ballot)
             db.commit()

@@ -1,23 +1,25 @@
-import os, uuid, boto3, json, re
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+import os
+import uuid
+import boto3
+import json
+import re
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 from werkzeug.utils import secure_filename
 from db_utils import get_ocr_results_by_session
-
 from db_model import (
     ValidBadgeIDs, Ballot, UploadedZip, UserSession, OCRResult,
     BallotCategory, BallotVotes, SessionLocal
 )
-
 from easy_ocr import process_image
 from io import BytesIO
 import zipfile
-from flask import jsonify
 from botocore.exceptions import NoCredentialsError, ClientError
 from collections import defaultdict, Counter
 
 s3 = boto3.client('s3')
 bucket_name = 'techbloom-ballots'
-app = Flask(__name__)
+
+app = Flask(__name__, template_folder='.')
 app.secret_key = 'secret-key'
 
 ALLOWED_BADGE_EXTENSIONS = {'csv', 'txt'}
@@ -41,7 +43,6 @@ def allowed_file(filename, allowed_extensions):
 def is_junk_file(file_info):
     filename = file_info.filename
     basename = os.path.basename(filename)
-
     return (
         filename.startswith('__MACOSX/') or
         '/__MACOSX/' in filename or
@@ -54,34 +55,30 @@ def is_junk_file(file_info):
 
 @app.route('/login')
 def login():
-    return render_template('login.html')
+    return render_template('a_login.html')
 
 @app.route('/create-session', methods=['GET', 'POST'])
 def create_session():
     if request.method == 'POST':
         password = request.form.get('password')
         session_id = str(uuid.uuid4())[:8]
-
         db_session = get_db_session()
         db_session.add(UserSession(session_id=session_id, password=password))
         db_session.commit()
         db_session.close()
-
         session['session_id'] = session_id
         flash(f'Generated Session ID: {session_id}')
         return redirect(url_for('upload_files'))
-    return render_template('createSession.html')
+    return render_template('a_createSession.html')
 
 @app.route('/join-session', methods=['GET', 'POST'])
 def join_session():
     if request.method == 'POST':
         session_id = request.form.get('session_id')
         password = request.form.get('password')
-
         db_session = get_db_session()
         user_session = db_session.query(UserSession).filter_by(session_id=session_id, password=password).first()
         db_session.close()
-
         if user_session:
             session['session_id'] = session_id
             session['joined_existing'] = True
@@ -90,14 +87,14 @@ def join_session():
         else:
             flash('Invalid session ID or password.')
             return redirect(request.url)
-    return render_template('joinSession.html')
+    return render_template('a_joinSession.html')
 
 @app.route('/upload-file', methods=['GET', 'POST'])
 def upload_files():
     session_id = session.get('session_id')
     if not session_id:
         flash('Please log in or create a session first.')
-        return redirect(url_for('login'))
+        return redirect(url_for('a_login.html'))
 
     db_session = get_db_session()
     joined_existing = session.get('joined_existing', False)
@@ -126,7 +123,7 @@ def upload_files():
         if not badgeFile and not zipFile and joined_existing:
             if joined_existing and (existing_badges or existing_zip):
                 flash('Empty session, please reupload.')
-                return redirect(url_for('dashboard'))
+                return redirect(url_for('a_dashboard.html'))
             else:
                 flash('Please upload both badge and ZIP files.')
                 return redirect(request.url)
@@ -154,39 +151,18 @@ def upload_files():
                     inner_filename = file_info.filename
                     if is_junk_file(file_info):
                         continue
-                    '''
-                    if inner_filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-                        with archive.open(file_info) as image_file:
-                            key = f"{session_id}/{os.path.basename(inner_filename)}"
-                            image_stream = BytesIO(image_file.read())
-                            image_stream.seek(0)
-                            if upload_to_s3(image_stream, bucket_name, key):
-                                try:
-                                    s3_object = s3.get_object(Bucket=bucket_name, Key=key)
-                                    s3_bytes = s3_object['Body'].read()
-                                    image_stream = BytesIO(s3_bytes)
-                                    text = process_image(image_stream, session_id)
-                                    db_session.add(OCRResult(
-                                        session_id=session_id,
-                                        filename=inner_filename,
-                                        extracted_text=json.dumps(text)
-                                    ))
-                                except Exception as e:
-                                    print(f"Failed to process {inner_filename}: {e}")
-                    '''
             db_session.commit()
         elif zipFile:
             flash('Invalid ZIP file.')
             return redirect(request.url)
 
         flash('Files uploaded successfully.')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('a_dashboard.html'))
 
-    return render_template('upload.html', joined_existing=joined_existing and (existing_badges or existing_zip))
+    return render_template('a_upload.html', joined_existing=joined_existing and (existing_badges or existing_zip))
 
 @app.route('/dashboard')
 def dashboard():
-
     session_id = session.get("session_id")
     if not session_id:
         return redirect("/login")
@@ -214,8 +190,7 @@ def dashboard():
         top3 = counts.most_common(3)  
         top3_per_category[category] = top3
 
-
-    return render_template("dashboard.html", top3_per_category=top3_per_category)
+    return render_template("a_dashboard.html", top3_per_category=top3_per_category)
 
 if __name__ == '__main__':
     app.run(debug=True)
