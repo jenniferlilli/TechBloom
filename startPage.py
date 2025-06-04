@@ -94,13 +94,13 @@ def upload_files():
     session_id = session.get('session_id')
     if not session_id:
         flash('Please log in or create a session first.')
-        return redirect(url_for('a_login.html'))
+        return redirect(url_for('login'))
 
     db_session = get_db_session()
     joined_existing = session.get('joined_existing', False)
     existing_badges = db_session.query(ValidBadgeIDs).filter_by(session_id=session_id).first()
     existing_zip = db_session.query(UploadedZip).filter_by(session_id=session_id).first()
-
+    '''
     if request.method == 'POST' and 'file' in request.files and len(request.files) == 1:
         file = request.files['file']
         if file.filename == '':
@@ -115,6 +115,7 @@ def upload_files():
                 return jsonify({'error': str(e)}), 500
         else:
             return jsonify({'error': 'Unsupported file format'}), 400
+    '''
 
     if request.method == 'POST':
         badgeFile = request.files.get('badge_file')
@@ -123,7 +124,7 @@ def upload_files():
         if not badgeFile and not zipFile and joined_existing:
             if joined_existing and (existing_badges or existing_zip):
                 flash('Empty session, please reupload.')
-                return redirect(url_for('a_dashboard.html'))
+                return redirect(url_for('dashboard'))
             else:
                 flash('Please upload both badge and ZIP files.')
                 return redirect(request.url)
@@ -138,7 +139,6 @@ def upload_files():
         elif badgeFile:
             flash('Invalid badge file. Must be .csv or .txt')
             return redirect(request.url)
-
         if zipFile and allowed_file(zipFile.filename, ALLOWED_ZIP_EXTENSIONS):
             filename = secure_filename(zipFile.filename)
             zip_bytes = zipFile.read()
@@ -157,7 +157,7 @@ def upload_files():
             return redirect(request.url)
 
         flash('Files uploaded successfully.')
-        return redirect(url_for('a_dashboard.html'))
+        return redirect(url_for('dashboard'))
 
     return render_template('a_upload.html', joined_existing=joined_existing and (existing_badges or existing_zip))
 
