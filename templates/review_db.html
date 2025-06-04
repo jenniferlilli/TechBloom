@@ -1,0 +1,155 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Top Votes Dashboard + Review Panel</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        h2 {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 20px;
+        }
+        .category-table, .review-table {
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .category-title, .review-title {
+            background-color: #f5f5f5;
+            text-align: center;
+            font-weight: bold;
+            padding: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 8px 12px;
+            text-align: center;
+            border-top: 1px solid #ccc;
+        }
+        .tooltip {
+            position: relative;
+            cursor: pointer;
+        }
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 80px;
+            background-color: black;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px 0;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -40px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+        .review-section {
+            margin-top: 60px;
+        }
+        .btn {
+            padding: 5px 10px;
+            margin: 2px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .btn-delete { background-color: #e74c3c; color: white; }
+        .btn-reprocess { background-color: #2ecc71; color: white; }
+        input[type="text"] {
+            width: 90%;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <h2>Top 3 Items per Category</h2>
+    <div class="grid-container">
+        {% for category, top_items in top_votes_per_category.items() %}
+        <div class="category-table">
+            <div class="category-title">Category {{ category }}</div>
+            <table>
+                <thead>
+                    <tr><th>Item Number</th></tr>
+                </thead>
+                <tbody>
+                    {% for item, votes in top_items %}
+                    <tr>
+                        <td class="tooltip">{{ item }}
+                            <span class="tooltiptext">{{ votes }} votes</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="review-section">
+        <h2>Review Dashboard</h2>
+        {% if review_data %}
+        <div class="review-table">
+            <div class="review-title">Votes Needing Review</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Ballot #</th>
+                        <th>Badge ID</th>
+                        <th>Category ID</th>
+                        <th>Vote</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in review_data %}
+                    <tr>
+                        <form method="POST" action="/review_action">
+                            <td>{{ item.ballot_number }}</td>
+                            <td>
+                                {% if item.allow_badge_edit %}
+                                <input type="text" name="badge_id" value="{{ item.badge_id }}">
+                                {% else %}
+                                {{ item.badge_id }}
+                                <input type="hidden" name="badge_id" value="{{ item.badge_id }}">
+                                {% endif %}
+                            </td>
+                            <td>{{ item.category_id }}<input type="hidden" name="category_id" value="{{ item.category_id }}"></td>
+                            <td><input type="text" name="vote" value="{{ item.vote }}"></td>
+                            <td>
+                                <input type="hidden" name="ballot_id" value="{{ item.ballot_id }}">
+                                <input type="hidden" name="ballot_number" value="{{ item.ballot_number }}">
+                                <button class="btn btn-reprocess" type="submit" name="action" value="reprocess">Reprocess</button>
+                                <button class="btn btn-delete" type="submit" name="action" value="delete">Delete</button>
+                            </td>
+                        </form>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p style="text-align: center; color: gray;">No errors to review</p>
+        {% endif %}
+    </div>
+</body>
+</html>
