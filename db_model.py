@@ -42,7 +42,6 @@ class BallotCategory(Base):
     __tablename__ = 'categories'
     id = Column(Integer, primary_key = True, autoincrement = True)
     category_id = Column(String)
-    category_name = Column(String)
 
 class BallotVotes(Base):
     __tablename__ = 'votes'
