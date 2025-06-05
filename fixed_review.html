@@ -1,0 +1,75 @@
+<h2>Review Dashboard</h2>
+
+<!-- Section 1: Missing Badge IDs -->
+<div class="section">
+  <h3>Ballots with Missing Badge IDs</h3>
+  <table>
+    <thead>
+      <tr><th>Ballot ID</th><th>Current Badge ID</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>12</td>
+        <td style="color: red;">(empty)</td>
+        <td>
+          <form action="/fix_badge" method="POST" style="display:inline;">
+            <input type="hidden" name="ballot_id" value="12">
+            <input type="text" name="badge_id" placeholder="Enter badge ID">
+            <button class="btn btn-reprocess">Fix</button>
+          </form>
+          <a class="btn btn-delete" href="/delete_ballot/12">Delete</a>
+        </td>
+      </tr>
+      <tr>
+        <td>15</td>
+        <td style="color: red;">(empty)</td>
+        <td>
+          <form action="/fix_badge" method="POST" style="display:inline;">
+            <input type="hidden" name="ballot_id" value="15">
+            <input type="text" name="badge_id" placeholder="Enter badge ID">
+            <button class="btn btn-reprocess">Fix</button>
+          </form>
+          <a class="btn btn-delete" href="/delete_ballot/15">Delete</a>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Section 2: Unreadable Votes -->
+<div class="section">
+  <h3>Unreadable Votes</h3>
+  <table>
+    <thead>
+      <tr><th>Vote ID</th><th>Ballot ID</th><th>Current Vote Value</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>101</td>
+        <td>12</td>
+        <td style="color: red;">9?A</td>
+        <td>
+          <form action="/fix_vote" method="POST" style="display:inline;">
+            <input type="hidden" name="vote_id" value="101">
+            <input type="text" name="vote" placeholder="Enter correct vote">
+            <button class="btn btn-reprocess">Fix</button>
+          </form>
+          <a class="btn btn-delete" href="/delete_vote/101">Delete</a>
+        </td>
+      </tr>
+      <tr>
+        <td>102</td>
+        <td>13</td>
+        <td style="color: red;">?</td>
+        <td>
+          <form action="/fix_vote" method="POST" style="display:inline;">
+            <input type="hidden" name="vote_id" value="102">
+            <input type="text" name="vote" placeholder="Enter correct vote">
+            <button class="btn btn-reprocess">Fix</button>
+          </form>
+          <a class="btn btn-delete" href="/delete_vote/102">Delete</a>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
