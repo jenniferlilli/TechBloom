@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Ballot Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f2f4f7;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #ff8dac;
+            text-align: center;
+        }
+        .ballot {
+            background: #fff;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 20px auto;
+            max-width: 600px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        .ballot h2 {
+            color: #34495e;
+        }
+        .vote {
+            padding: 6px 0;
+        }
+        .label {
+            font-weight: bold;
+            color: #2c3e50;
+        }
+    </style>
+</head>
+<body>
+    <h1>Ballot OCR Results</h1>
+
+    {% if results %}
+        {% for item in results %}
+            <div class="ballot">
+                <h2>Image: {{ item.image }}</h2>
+                <p class="label">Badge ID:</p>
+                <p>{{ item.badge_id }}</p>
+
+                <p class="label">Votes:</p>
+                <ul>
+                    {% for vote in item.votes %}
+                        <li class="vote">{{ vote.category }}: <strong>{{ vote.choice }}</strong></li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p style="text-align:center;">No ballot results available.</p>
+    {% endif %}
+</body>
+</html>
