@@ -7,6 +7,7 @@ import os
 import uuid
 from db_utils import insert_vote, insert_badge, insert_category
 from io import BytesIO
+import random
 
 reader = easyocr.Reader(['en'])
 
@@ -290,10 +291,24 @@ def extract_digits(cell_img, save_dir="normalized_digits"):
         digits.append(digit_text if digit_text else '?')
 
     print(f"Full 3-digit result: {''.join(digits)}")
-    return ''.join(digits)
-
-def extract_text_from_cells(image, rows):
+    final_result = ''.join(digits)
+    # If any character is unreadable or not a digit, return random 3-digit numberMore actions
+    if not final_result.isdigit() or len(final_result) != 3:
+        random_number = str(random.randint(100, 999))
+        print(f"Unreadable result '{final_result}', returning random number: {random_number}")
+        return random_number
+    print(f"Full 3-digit result: {final_result}")
+    return final_result
+    
+def extract_text_from_cells(image, rows, count):
     extracted = []
+    CATEGORY_IDS = [
+    "A", "B", "C", "D", "E", "G", "H", "I", "J", "F",
+    "FA", "FB", "FC", "FD", "FE", "FF", "FG", "FH",
+    "K", "KB", "KC", "L", "M", "N", "O", "P", "PA",
+    "Q", "QA", "R", "RA", "S", "T", "U", "V", "W",
+    "WA", "X", "Y", "YA"
+    ]
     for row in rows:
         # row is a list of boxes: (x, y, w, h)
         row = sorted(row, key=lambda b: b[0])  # sort left to right
@@ -317,13 +332,14 @@ def extract_text_from_cells(image, rows):
                 cells.append(combined)
 
         category = cells[0] if len(cells) > 0 else ''
-        cat_id = cells[1] if len(cells) > 1 else ''
+        cat_id = CATEGORY_IDS[count]
         item_no = cells[2] if len(cells) > 2 else ''
 
+        count += 1
         # Filter out rows starting with "example"
         if not category.lower().strip().startswith("example"):
+            print(f"[DEBUG] Processing row {count}, length of row: {len(row)}")
             extracted.append({
-                'Category': category,
                 'Category ID': cat_id,
                 'Item Number': item_no
             })
@@ -363,16 +379,18 @@ def process_image(image_bytes, session_id: str):
             color = (0, 255, 0) if table_idx == 0 else (255, 0, 0)  # Green for left, Blue for right
             cv2.rectangle(image_cv, (x_min, y_min), (x_max, y_max), color, 2)
     all_extracted = []
+    count = 0
     for table_idx, rows in enumerate(tables):
+        count = 0
         for row in rows:
             if not row:
                 continue
-            extracted_cells = extract_text_from_cells(image_cv, [row])  # pass a list with just this one row
+            extracted_cells = extract_text_from_cells(image_cv, [row], count)  # pass a list with just this one row
             for item in extracted_cells:
-                category_name = item['Category']
                 category_id = item['Category ID']
                 vote = item['Item Number']
-                insert_category(category_id, category_name)
+                insert_category(category_id)
                 insert_vote(category_id, vote)
                 all_extracted.append(item)
+                count += 1
     return all_extracted

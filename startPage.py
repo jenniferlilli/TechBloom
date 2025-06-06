@@ -14,9 +14,7 @@ from db_model import (
     OCRResult,
     BallotCategory,
     BallotVotes,
-    SessionLocal,
-    get_all_ballots_with_missing_badge,
-    get_all_unreadable_votes
+    SessionLocal
 )
 from easy_ocr import process_image
 from io import BytesIO
@@ -27,11 +25,12 @@ from collections import defaultdict, Counter
 s3 = boto3.client('s3')
 bucket_name = 'techbloom-ballots'
 
-app = Flask(__name__, template_folder='templates')
-app.secret_key = 'secret-key' 
+app = Flask(__name__, template_folder='.')
+app.secret_key = 'secret-key'  # For production, load from env
 
 ALLOWED_BADGE_EXTENSIONS = {'csv', 'txt'}
 ALLOWED_ZIP_EXTENSIONS = {'zip'}
+
 
 def get_db_session():
     return SessionLocal()
@@ -63,7 +62,8 @@ def is_junk_file(file_info):
 
 @app.route('/login')
 def login():
-    return render_template('login.html')
+    return render_template('a_login.html')
+
 
 @app.route('/create-session', methods=['GET', 'POST'])
 def create_session():
@@ -77,7 +77,7 @@ def create_session():
         session['session_id'] = session_id
         flash(f'Generated Session ID: {session_id}')
         return redirect(url_for('upload_files'))
-    return render_template('createSession.html')
+    return render_template('a_createSession.html')
 
 
 @app.route('/join-session', methods=['GET', 'POST'])
@@ -98,8 +98,7 @@ def join_session():
         else:
             flash('Invalid session ID or password.')
             return redirect(request.url)
-    return render_template('joinSession.html')
-
+    return render_template('a_joinSession.html')
 
 @app.route('/upload-file', methods=['GET', 'POST'])
 def upload_files():
@@ -127,6 +126,7 @@ def upload_files():
                 db_session.close()
                 return redirect(request.url)
 
+
         if badgeFile and allowed_file(badgeFile.filename, ALLOWED_BADGE_EXTENSIONS):
             badge_lines = badgeFile.read().decode('utf-8').splitlines()
             for line in badge_lines:
@@ -140,16 +140,18 @@ def upload_files():
             db_session.close()
             return redirect(request.url)
 
- 
+
         if zipFile and allowed_file(zipFile.filename, ALLOWED_ZIP_EXTENSIONS):
             filename = secure_filename(zipFile.filename)
             zip_bytes = zipFile.read()
             zip_key = f'{session_id}/{filename}'
 
             if upload_to_s3(BytesIO(zip_bytes), bucket_name, zip_key):
+                # Record just the filename in the DB (model only has session_id + filename)
                 db_session.add(UploadedZip(session_id=session_id, filename=filename))
                 db_session.commit()
 
+             
                 zip_stream = BytesIO(zip_bytes)
                 try:
                     with zipfile.ZipFile(zip_stream) as archive:
@@ -161,6 +163,7 @@ def upload_files():
                                 with archive.open(file_info) as image_file:
                                     image_data = image_file.read()
                                     try:
+                                        # process_image returns whatever structure your OCR needs
                                         ocr_text = process_image(image_data)
                                         db_session.add(OCRResult(
                                             session_id=session_id,
@@ -189,8 +192,7 @@ def upload_files():
         return redirect(url_for('dashboard'))
 
     db_session.close()
-    return render_template('upload.html', joined_existing=joined_existing and (existing_badges or existing_zip))
-
+    return render_template('a_upload.html', joined_existing=joined_existing and (existing_badges or existing_zip))
 
 @app.route('/dashboard')
 def dashboard():
@@ -217,18 +219,33 @@ def dashboard():
         top3 = counts.most_common(3)
         top3_per_category[category] = top3
 
-    return render_template("dashboard.html", top3_per_category=top3_per_category)
+    return render_template("a_dashboard.html", top3_per_category=top3_per_category)
 
 @app.route('/review')
 def review_dashboard():
-    session = SessionLocal()
+    session_id = session.get('session_id')
+    if not session_id:
+        flash('Please log in first.')
+        return redirect(url_for('login'))
 
-    error_ballots = session.query(Ballot).filter((Ballot.badge_id == None) | (Ballot.badge_id == '')).all()
-    unreadable_votes = session.query(BallotVotes).filter(BallotVotes.vote == 'unreadable').all()
+    db_session = get_db_session()
 
-    session.close()
-    return render_template('a_review_db.html', error_ballots=error_ballots, unreadable_votes=unreadable_votes)
+    error_ballots = db_session.query(Ballot).filter(
+        Ballot.session_id == session_id,
+        (Ballot.badge_id == None) | (Ballot.badge_id == '')
+    ).all()
 
+  
+    unreadable_votes = db_session.query(BallotVotes).filter(
+        BallotVotes.vote == 'unreadable'
+    ).all()
+
+    db_session.close()
+    return render_template(
+        'a_review_db.html',
+        error_ballots=error_ballots,
+        unreadable_votes=unreadable_votes
+    )
 
 @app.route('/fix_badge', methods=['POST'])
 def fix_badge():
@@ -242,6 +259,7 @@ def fix_badge():
     db_session.close()
     flash('Badge ID updated successfully')
     return redirect(request.referrer)
+
 
 @app.route('/fix_vote', methods=['POST'])
 def fix_vote():
@@ -272,6 +290,7 @@ def delete_ballot(ballot_id):
     db_session = get_db_session()
     ballot = db_session.query(Ballot).get(ballot_id)
     if ballot:
+
         ocr_result = db_session.query(OCRResult).filter_by(session_id=ballot.session_id).first()
         if ocr_result:
             try:
@@ -279,6 +298,7 @@ def delete_ballot(ballot_id):
             except Exception as e:
                 print("Error deleting from S3:", e)
 
+  
         db_session.query(BallotVotes).filter_by(ballot_id=ballot.id).delete()
         db_session.delete(ballot)
         db_session.commit()
@@ -286,22 +306,6 @@ def delete_ballot(ballot_id):
     flash('Ballot and associated data deleted')
     return redirect(request.referrer)
 
-@app.route('/seed_review_test')
-def seed_review_test():
-    session = SessionLocal()
-
-    bad_ballot = Ballot(session_id="test_session", badge_id='', name="Test Ballot")
-    session.add(bad_ballot)
-    session.flush()
-
-    unreadable_vote = BallotVotes(ballot_id=bad_ballot.id, category_id='A', vote='unreadable')
-    session.add(unreadable_vote)
-
-    session.commit()
-    session.close()
-
-    return "Seeded fake review data"
-
 if __name__ == '__main__':
-    print("Starting Flask app…")
+    print("Starting Flask app...")
     app.run(debug=True)
