@@ -27,7 +27,7 @@ from collections import defaultdict, Counter
 s3 = boto3.client('s3')
 bucket_name = 'techbloom-ballots'
 
-app = Flask(__name__, template_folder='.')
+app = Flask(__name__, template_folder='templates')
 app.secret_key = 'secret-key' 
 
 ALLOWED_BADGE_EXTENSIONS = {'csv', 'txt'}
@@ -63,7 +63,7 @@ def is_junk_file(file_info):
 
 @app.route('/login')
 def login():
-    return render_template('a_login.html')
+    return render_template('login.html')
 
 @app.route('/create-session', methods=['GET', 'POST'])
 def create_session():
@@ -77,7 +77,7 @@ def create_session():
         session['session_id'] = session_id
         flash(f'Generated Session ID: {session_id}')
         return redirect(url_for('upload_files'))
-    return render_template('a_createSession.html')
+    return render_template('createSession.html')
 
 
 @app.route('/join-session', methods=['GET', 'POST'])
@@ -98,7 +98,7 @@ def join_session():
         else:
             flash('Invalid session ID or password.')
             return redirect(request.url)
-    return render_template('a_joinSession.html')
+    return render_template('joinSession.html')
 
 
 @app.route('/upload-file', methods=['GET', 'POST'])
@@ -189,7 +189,7 @@ def upload_files():
         return redirect(url_for('dashboard'))
 
     db_session.close()
-    return render_template('a_upload.html', joined_existing=joined_existing and (existing_badges or existing_zip))
+    return render_template('upload.html', joined_existing=joined_existing and (existing_badges or existing_zip))
 
 
 @app.route('/dashboard')
@@ -217,7 +217,7 @@ def dashboard():
         top3 = counts.most_common(3)
         top3_per_category[category] = top3
 
-    return render_template("a_dashboard.html", top3_per_category=top3_per_category)
+    return render_template("dashboard.html", top3_per_category=top3_per_category)
 
 @app.route('/review')
 def review_dashboard():
