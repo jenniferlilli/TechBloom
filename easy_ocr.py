@@ -1,16 +1,12 @@
-import easyocr
+import easyocr #not used rn, will use if have time for a backup
 import cv2
 import numpy as np
-import os
-import uuid
 import timm
 import torchvision.transforms as transforms
 import torch
 import torch.nn.functional as F
-import re
 from PIL import Image
 from db_utils import insert_vote, insert_badge, insert_category
-from io import BytesIO
 
 model = timm.create_model("resnet18", pretrained=False, num_classes=10)
 model.conv1 = torch.nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
@@ -505,9 +501,14 @@ def extract_digits(cell_img):
                 probabilities = F.softmax(output, dim=1)[0].cpu().numpy()
 
             pred_class = int(np.argmax(probabilities))
+            confidence = probabilities[pred_class]
+
             print(f"Segment {i} predicted digit: {pred_class}")
             print(f"Segment {i} confidences: " + ", ".join(f"{d}:{p:.2f}" for d, p in enumerate(probabilities)))
-            digits.append(str(pred_class))
+            if confidence < 0.70:
+                digits.append('?')
+            else:
+                digits.append(str(pred_class))
         else:
             print(f"No digit extracted for segment {i}")
             digits.append('?')
@@ -542,7 +543,15 @@ def extract_text_from_cells(image, rows, count):
             print(f"[DEBUG] Processing row {count}, length of row: {len(row)}")
             extracted.append({
                 'Category ID': cat_id,
-                'Item Number': item_no
+                'Item Number': item_no,
+                'Status' : 'readable'
+            })
+        else:
+            print(f"Not valid vote {item_no}.")
+            extracted.append({
+                'Category ID': cat_id,
+                'Item Number' : item_no,
+                'Status' : 'unreadable'
             })
     return extracted
 
@@ -557,7 +566,9 @@ def process_image(image_bytes, session_id: str):
     print(f"Extracted Badge ID: {badge_id}")
 
     if len(badge_id) == 5 and badge_id.find("?") == -1: #PROB EDIT WITH MORE CRITERIA
-        insert_badge(session_id, badge_id)
+        insert_badge(session_id, badge_id, 'readable')
+    else:
+        insert_badge(session_id, badge_id, 'unreadable')
 
     boxes = detect_table_cells(image_cv)
     boxes = filter_valid_boxes(boxes, min_y=450)
@@ -578,8 +589,9 @@ def process_image(image_bytes, session_id: str):
         for item in extracted_cells:
             category_id = item['Category ID']
             vote = item['Item Number']
+            status = item['Status']
             insert_category(category_id)
-            insert_vote(category_id, vote)
+            insert_vote(category_id, vote, status)
             all_extracted.append(item)
         count += len(rows)
     return all_extracted

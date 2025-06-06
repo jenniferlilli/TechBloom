@@ -16,6 +16,7 @@ class Ballot(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(String, ForeignKey('sessions.id'))
     badge_id = Column(String)
+    badge_status = Column(String)
     name = Column(String)
     created_at = Column(DateTime, server_default=func.current_timestamp())
 
@@ -50,16 +51,17 @@ class BallotVotes(Base):
     ballot_id = Column(Integer, ForeignKey('ballots.id'))
     category_id = Column(String, ForeignKey('categories.category_id'))
     vote = Column(String)
+    vote_status = Column(String)
 
 def get_all_ballots_with_missing_badge():
     session = get_db_session()
-    ballots = session.query(Ballot).filter((Ballot.badge_id == None) | (Ballot.badge_id == '')).all()
+    ballots = session.query(Ballot).filter(Ballot.badge_status == 'unreadable').all()
     session.close()
     return ballots
 
 def get_all_unreadable_votes():
     session = get_db_session()
-    votes = session.query(BallotVotes).filter(BallotVotes.vote == 'unreadable').all()
+    votes = session.query(BallotVotes).filter(BallotVotes.vote_status == 'unreadable').all()
     session.close()
     return votes
 
