@@ -37,12 +37,12 @@ class OCRResult(Base):
     session_id = Column(String, ForeignKey('sessions.id'))
     filename = Column(String)
     extracted_text = Column(String)  # for debugging
+    
 
 class BallotCategory(Base):
     __tablename__ = 'categories'
     id = Column(Integer, primary_key = True, autoincrement = True)
     category_id = Column(String)
-    category_name = Column(String)
 
 class BallotVotes(Base):
     __tablename__ = 'votes'
@@ -51,8 +51,23 @@ class BallotVotes(Base):
     category_id = Column(String, ForeignKey('categories.category_id'))
     vote = Column(String)
 
+def get_all_ballots_with_missing_badge():
+    session = get_db_session()
+    ballots = session.query(Ballot).filter((Ballot.badge_id == None) | (Ballot.badge_id == '')).all()
+    session.close()
+    return ballots
+
+def get_all_unreadable_votes():
+    session = get_db_session()
+    votes = session.query(BallotVotes).filter(BallotVotes.vote == 'unreadable').all()
+    session.close()
+    return votes
+
 engine = create_engine('sqlite:///data.db')
 Base.metadata.drop_all(bind=engine)
 Base.metadata.create_all(engine)
 
 SessionLocal = scoped_session(sessionmaker(bind=engine))
+
+def get_db_session():
+    return SessionLocal()
