@@ -65,6 +65,7 @@
 <body>
   <h2>Review Dashboard</h2>
 
+  <!-- Section 1: Ballots with Missing Badge IDs -->
   <div class="section">
     <h3>Ballots with Missing Badge IDs</h3>
     {% if error_ballots %}
@@ -87,23 +88,28 @@
                 <span style="color: red;">(empty)</span>
               {% endif %}
             </td>
-            <td>
-              <form action="{{ url_for('fix_badge') }}" method="POST" style="display:inline;">
+            <td style="white-space: nowrap;">
+              <!-- FIX BADGE FORM -->
+              <form action="{{ url_for('fix_badge') }}" method="POST" style="display:inline-block; margin-right: 50px;">
                 <input type="hidden" name="ballot_id" value="{{ ballot.id }}">
-                <input type="text" name="badge_id" placeholder="Enter badge ID">
+                <input type="text" name="badge_id" placeholder="Enter badge ID" required>
                 <button type="submit" class="btn btn-reprocess">Fix</button>
               </form>
-              <a href="{{ url_for('delete_ballot', ballot_id=ballot.id) }}" class="btn btn-delete">Delete</a>
+              <!-- DELETE BALLOT FORM -->
+              <form action="{{ url_for('delete_ballot', ballot_id=ballot.id) }}" method="GET" style="display:inline-block;">
+                <button type="submit" class="btn btn-delete">Delete</button>
+              </form>
             </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
     {% else %}
-      <p class="no-data">No ballots with missing badge IDs.</p>
+      <p class="no-data">No ballots with missing Badge IDs.</p>
     {% endif %}
   </div>
 
+  <!-- Section 2: Unreadable Votes -->
   <div class="section">
     <h3>Unreadable Votes</h3>
     {% if unreadable_votes %}
@@ -111,7 +117,7 @@
         <thead>
           <tr>
             <th>Vote Number</th>
-            <th>Ballot ID</th>
+            <th>Ballot Number</th>
             <th>Vote Value</th>
             <th>Actions</th>
           </tr>
@@ -121,16 +127,18 @@
           <tr>
             <td>{{ vote.id }}</td>
             <td>{{ vote.ballot_id }}</td>
-            <td>
-              <span style="color: red;">{{ vote.vote }}</span>
-            </td>
-            <td>
-              <form action="{{ url_for('fix_vote') }}" method="POST" style="display:inline;">
+            <td style="color: red;">{{ vote.vote }}</td>
+            <td style="white-space: nowrap;">
+              <!-- FIX VOTE FORM -->
+              <form action="{{ url_for('fix_vote') }}" method="POST" style="display:inline-block; margin-right: 50px;">
                 <input type="hidden" name="vote_id" value="{{ vote.id }}">
-                <input type="text" name="vote" placeholder="Enter correct vote">
+                <input type="text" name="vote" placeholder="Enter correct vote" required>
                 <button type="submit" class="btn btn-reprocess">Fix</button>
               </form>
-              <a href="{{ url_for('delete_vote', vote_id=vote.id) }}" class="btn btn-delete">Delete</a>
+              <!-- DELETE VOTE FORM -->
+              <form action="{{ url_for('delete_vote', vote_id=vote.id) }}" method="GET" style="display:inline-block; margin: 0">
+                <button type="submit" class="btn btn-delete">Delete</button>
+              </form>
             </td>
           </tr>
           {% endfor %}
