@@ -11,7 +11,6 @@ import re
 from PIL import Image
 from db_utils import insert_vote, insert_badge, insert_category
 from io import BytesIO
-import random
 
 model = timm.create_model("resnet18", pretrained=False, num_classes=10)
 model.conv1 = torch.nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
@@ -120,7 +119,6 @@ def extract_and_normalize_largest_digit(image):
     x1, x2 = np.min(xs), np.max(xs)
     y1, y2 = np.min(ys), np.max(ys)
 
-    # Add crop padding to avoid bottom-cut
     pad = 10
     x1 = max(x1 - pad, 0)
     y1 = max(y1 - pad, 0)
@@ -152,25 +150,18 @@ def preprocess_for_ocr(img):
     return threshed
 
 def deskew_image(image):
-    # Convert to grayscale if needed
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image.copy()
-
-    # Enhanced thresholding with noise removal
     _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=2)
 
-    # More aggressive edge detection
     edges = cv2.Canny(binary, 30, 150, apertureSize=3, L2gradient=True)
 
-    # Detect both standard and probabilistic Hough lines
     lines = []
 
-    # Standard Hough for long lines
     hough_lines = cv2.HoughLines(edges, 1, np.pi / 180, threshold=150)
     if hough_lines is not None:
         lines.extend(hough_lines[:, 0].tolist())
 
-    # Probabilistic Hough for shorter segments
     houghp_lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=100,
                                    minLineLength=min(image.shape[1] // 4, 50),
                                    maxLineGap=10)
@@ -179,31 +170,27 @@ def deskew_image(image):
             dx = x2 - x1
             dy = y2 - y1
             angle = np.arctan2(dy, dx)
-            lines.append([0, angle])  # Format compatible with standard Hough
+            lines.append([0, angle])
 
     if not lines:
         return image
 
-    # Extract and filter angles (focusing on near-horizontal lines)
     angles = []
     for line in lines:
-        if len(line) == 2:  # Standard Hough format
+        if len(line) == 2:
             rho, theta = line
             angle = np.degrees(theta) - 90
-        else:  # Probabilistic Hough converted format
+        else:
             angle = np.degrees(line[1]) - 90
 
-        # Only consider nearly horizontal lines (more tolerant range)
         if -10 < angle < 10:
             angles.append(angle)
 
     if not angles:
         return image
 
-    # Use mean instead of median for more aggressive straightening
     mean_angle = np.mean(angles)
 
-    # Always rotate regardless of angle magnitude
     (h, w) = image.shape[:2]
     center = (w // 2, h // 2)
     M = cv2.getRotationMatrix2D(center, mean_angle, 1.0)
@@ -218,20 +205,14 @@ def preprocess(image):
     _, binary = cv2.threshold(blur, 180, 255, cv2.THRESH_BINARY_INV)
     return binary
 
-def split_roi_into_digit_boxes(image, expected_rows=5, debug_dir="debug_boxes"):
-    os.makedirs(debug_dir, exist_ok=True)
-
-    # Step 1: Enhanced preprocessing
+def split_roi_into_digit_boxes(image, expected_rows=5):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # Noise reduction with bilateral filter (preserves edges)
     blurred = cv2.bilateralFilter(gray, 9, 75, 75)
 
-    # Contrast enhancement
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
     enhanced = clahe.apply(blurred)
 
-    # Adaptive thresholding with better parameters
     binary = cv2.adaptiveThreshold(
         enhanced, 255,
         cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
@@ -240,7 +221,6 @@ def split_roi_into_digit_boxes(image, expected_rows=5, debug_dir="debug_boxes"):
         C=2
     )
 
-    # Step 2: Find REG box (same as before)
     contours, _ = cv2.findContours(binary.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     reg_rect = None
     max_area = 0
@@ -258,9 +238,7 @@ def split_roi_into_digit_boxes(image, expected_rows=5, debug_dir="debug_boxes"):
 
     x, y, w, h = reg_rect
     roi = image[y:y + h, x:x + w]
-    cv2.imwrite(os.path.join(debug_dir, "reg_id_roi.png"), roi)
 
-    # Step 3: Find underlines (same as before)
     gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
     th = cv2.adaptiveThreshold(
         gray_roi, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
@@ -291,7 +269,6 @@ def split_roi_into_digit_boxes(image, expected_rows=5, debug_dir="debug_boxes"):
     for i, (ux, uy, uw, uh) in enumerate(underline_boxes[:1]):
         line_area = th[:uy, left_x:right_x]
 
-        # Detect horizontal lines above digits
         long_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (40, 1))
         long_line = cv2.morphologyEx(line_area, cv2.MORPH_OPEN, long_kernel, iterations=1)
         top_contours, _ = cv2.findContours(long_line, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -302,27 +279,21 @@ def split_roi_into_digit_boxes(image, expected_rows=5, debug_dir="debug_boxes"):
 
         cropped_row = roi[top_y:uy, left_x:right_x]
 
-        # Enhanced digit extraction
         row_gray = cv2.cvtColor(cropped_row, cv2.COLOR_BGR2GRAY)
 
-        # Improved binarization
         _, row_binary = cv2.threshold(row_gray, 0, 255,
                                       cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
-        # Morphological operations to connect broken digits
         kernel_close = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
         closed = cv2.morphologyEx(row_binary, cv2.MORPH_CLOSE, kernel_close)
 
-        # Remove small noise
         kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
         cleaned = cv2.morphologyEx(closed, cv2.MORPH_OPEN, kernel_open)
 
-        # Find contours of potential digits
         digit_contours, _ = cv2.findContours(cleaned, cv2.RETR_EXTERNAL,
                                              cv2.CHAIN_APPROX_SIMPLE)
         digit_contours = sorted(digit_contours, key=lambda cnt: cv2.boundingRect(cnt)[0])
 
-        # Combine overlapping/close contours
         combined_contours = []
         if digit_contours:
             combined_contours = [digit_contours[0]]
@@ -331,15 +302,12 @@ def split_roi_into_digit_boxes(image, expected_rows=5, debug_dir="debug_boxes"):
                 x1, y1, w1, h1 = cv2.boundingRect(combined_contours[-1])
                 x2, y2, w2, h2 = cv2.boundingRect(cnt)
 
-                # If contours overlap or are close horizontally (within 5 pixels)
                 if x2 <= (x1 + w1 + 5):
-                    # Combine the two contours
                     combined_x = min(x1, x2)
                     combined_y = min(y1, y2)
                     combined_w = max(x1 + w1, x2 + w2) - combined_x
                     combined_h = max(y1 + h1, y2 + h2) - combined_y
 
-                    # Create a new combined contour
                     combined_contours[-1] = np.array([[
                         [combined_x, combined_y],
                         [combined_x + combined_w, combined_y],
@@ -354,7 +322,6 @@ def split_roi_into_digit_boxes(image, expected_rows=5, debug_dir="debug_boxes"):
             area = dw * dh
             aspect = dh / dw if dw > 0 else 0
 
-            # Filter noise by size and shape (relaxed constraints)
             if dh > 10 and dw > 5 and area > 50:
                 padding = 5
                 pad_top = max(dy - padding, 0)
@@ -364,24 +331,17 @@ def split_roi_into_digit_boxes(image, expected_rows=5, debug_dir="debug_boxes"):
 
                 digit = cropped_row[pad_top:pad_bottom, pad_left:pad_right]
 
-                # Final enhancement of individual digits
                 digit_gray = cv2.cvtColor(digit, cv2.COLOR_BGR2GRAY)
 
-                # Local contrast enhancement
                 digit_clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(4, 4))
                 digit_enhanced = digit_clahe.apply(digit_gray)
 
-                # Final thresholding
                 _, digit_binary = cv2.threshold(digit_enhanced, 0, 255,
                                                 cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-                # Remove border noise
                 digit_clean = cv2.erode(digit_binary,
                                         cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)),
                                         iterations=1)
-
-                filename = f"digit_row_{i + 1}_col_{j + 1}.png"
-                cv2.imwrite(os.path.join(debug_dir, filename), digit_clean)
 
                 cv2.rectangle(output,
                               (left_x + pad_left, top_y + pad_top),
@@ -390,13 +350,10 @@ def split_roi_into_digit_boxes(image, expected_rows=5, debug_dir="debug_boxes"):
 
                 digit_boxes.append(digit_clean)
 
-    cv2.imwrite(os.path.join(debug_dir, "final_detected_digits.png"), output)
-    print(f"[✓] Extracted {len(digit_boxes)} digits from REG box.")
+    print(f"Extracted {len(digit_boxes)} digits from REG box.")
     return digit_boxes
 
-def process_badge_id(image, model, debug_dir="debug_digits"):
-    os.makedirs(debug_dir, exist_ok=True)
-
+def process_badge_id(image, model):
     transform = transforms.Compose([
         transforms.ToPILImage(),
         transforms.ToTensor(),
@@ -405,7 +362,7 @@ def process_badge_id(image, model, debug_dir="debug_digits"):
 
     h, w = image.shape[:2]
     roi = image[0:int(h * 0.25), int(w * 0.65):w]
-    digit_boxes = split_roi_into_digit_boxes(roi, debug_dir=debug_dir)
+    digit_boxes = split_roi_into_digit_boxes(roi)
 
     digit_string = ""
 
@@ -413,39 +370,30 @@ def process_badge_id(image, model, debug_dir="debug_digits"):
         if len(digit_img.shape) == 3:
             digit_img = cv2.cvtColor(digit_img, cv2.COLOR_BGR2GRAY)
 
-        # Thresholding
         _, digit_binary = cv2.threshold(digit_img, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
-        # Get original dimensions before any resizing
         orig_h, orig_w = digit_binary.shape
         aspect_ratio = orig_w / float(orig_h)
 
-        # Center the digit with minimal padding
         centered = center_digit_proportional(digit_binary)
 
-        # Calculate target dimensions maintaining exact original proportions
-        if orig_h > orig_w:  # Tall digit
-            new_h = 24  # Leave 2px padding top/bottom (for final 28px)
-            new_w = max(4, int(new_h * aspect_ratio))  # Minimum 4px width
-        else:  # Wide digit
-            new_w = 24  # Leave 2px padding left/right
+        if orig_h > orig_w:
+            new_h = 24
+            new_w = max(4, int(new_h * aspect_ratio))
+        else:
+            new_w = 24
             new_h = int(new_w / aspect_ratio)
 
-        # Resize with strict aspect ratio preservation
         resized = cv2.resize(centered, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
 
-        # Create 28x28 canvas and center the digit
         processed = np.zeros((28, 28), dtype=np.uint8)
         start_x = (28 - new_w) // 2
         start_y = (28 - new_h) // 2
         processed[start_y:start_y + new_h, start_x:start_x + new_w] = resized
 
-        # Very slight vertical dilation only (for thin digits)
-        if aspect_ratio < 0.5:  # Only for very thin digits like '1'
-            kernel = np.ones((3, 1), np.uint8)  # Vertical dilation only
+        if aspect_ratio < 0.5:
+            kernel = np.ones((3, 1), np.uint8)
             processed = cv2.dilate(processed, kernel, iterations=1)
-
-        cv2.imwrite(os.path.join(debug_dir, f"digit_{i}_processed.png"), processed)
 
         input_tensor = transform(processed).unsqueeze(0)
         with torch.no_grad():
@@ -456,7 +404,6 @@ def process_badge_id(image, model, debug_dir="debug_digits"):
     return digit_string
 
 def center_digit_proportional(img):
-    """Center digit with minimal padding while maintaining exact proportions"""
     pts = cv2.findNonZero(img)
     if pts is None:
         return img
@@ -464,7 +411,6 @@ def center_digit_proportional(img):
     x, y, w, h = cv2.boundingRect(pts)
     digit_only = img[y:y + h, x:x + w]
 
-    # Add minimal padding (2px) while maintaining exact shape
     padded = np.zeros((h + 4, w + 4), dtype=np.uint8)
     padded[2:2 + h, 2:2 + w] = digit_only
 
@@ -503,7 +449,7 @@ def split_tables_by_x_gap(boxes):
     return left, right
 
 def group_cells_by_rows(boxes, y_thresh=10):
-    boxes = sorted(boxes, key=lambda b: (b[1], b[0]))  # Top to bottom, then left to right
+    boxes = sorted(boxes, key=lambda b: (b[1], b[0]))
     rows = []
 
     for box in boxes:
@@ -534,35 +480,24 @@ def preprocess_cell(cell_img):
     resized = cv2.resize(thresh, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
     return resized
 
-def extract_digits(cell_img, save_dir="normalized_digits"):
+def extract_digits(cell_img):
     h, w = cell_img.shape[:2]
     segment_width = w // 3
-    os.makedirs(save_dir, exist_ok=True)
     digits = []
     for i in range(3):
         start_x = i * segment_width
         end_x = (i + 1) * segment_width if i < 2 else w
         digit_img = cell_img[:, start_x:end_x]
 
-        # Save raw debug segment (optional)
-        cv2.imwrite(os.path.join(save_dir, f"debug_segment_{uuid.uuid4().hex[:8]}_{i}_raw.jpg"), digit_img)
-
         norm_digit = extract_and_normalize_largest_digit(digit_img)
         print(f"Segment {i} norm_digit is None: {norm_digit is None}")
         if norm_digit is not None:
-            # Save normalized digit image
-            unique_id = uuid.uuid4().hex[:8]
-            save_path = os.path.join(save_dir, f"digit_{unique_id}_{i}.jpg")
-            cv2.imwrite(save_path, norm_digit)
-            print(f"Saved normalized digit image: {save_path}")
+
             if isinstance(norm_digit, np.ndarray):
                 norm_digit = transforms.ToPILImage()(norm_digit)
 
-            # Predict with model
-            try:
-                input_tensor = transform(norm_digit).unsqueeze(0)
-            except:
-                print("error")
+            input_tensor = transform(norm_digit).unsqueeze(0)
+
             device = next(model.parameters()).device
             input_tensor = input_tensor.to(device)
             with torch.no_grad():
