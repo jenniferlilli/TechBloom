@@ -5,20 +5,16 @@ import json
 import re
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 from werkzeug.utils import secure_filename
-from db_utils import get_ocr_results_by_session
 from db_model import (
     ValidBadgeIDs,
     Ballot,
     UploadedZip,
     UserSession,
     OCRResult,
-    BallotCategory,
     BallotVotes,
     SessionLocal,
-    get_all_ballots_with_missing_badge,
-    get_all_unreadable_votes
 )
-from easy_ocr import process_image
+from easy_ocr import process_image, badge_id_exists, readable_badge_id_exists
 from io import BytesIO
 import zipfile
 from botocore.exceptions import NoCredentialsError, ClientError
@@ -28,7 +24,7 @@ s3 = boto3.client('s3')
 bucket_name = 'techbloom-ballots'
 
 app = Flask(__name__, template_folder='.')
-app.secret_key = 'secret-key' 
+app.secret_key = 'secret-key'
 
 ALLOWED_BADGE_EXTENSIONS = {'csv', 'txt'}
 ALLOWED_ZIP_EXTENSIONS = {'zip'}
@@ -128,7 +124,12 @@ def upload_files():
                 return redirect(request.url)
 
         if badgeFile and allowed_file(badgeFile.filename, ALLOWED_BADGE_EXTENSIONS):
-            badge_lines = badgeFile.read().decode('utf-8').splitlines()
+            try:
+                badge_lines = badgeFile.read().decode('utf-8').splitlines()
+            except UnicodeDecodeError as e:
+                flash('Badge file must be UTF-8 encoded text (.csv or .txt).', 'error')
+                db_session.close()
+                return redirect(request.url)
             for line in badge_lines:
                 badge_id = line.strip()
                 if badge_id:
@@ -140,7 +141,7 @@ def upload_files():
             db_session.close()
             return redirect(request.url)
 
- 
+
         if zipFile and allowed_file(zipFile.filename, ALLOWED_ZIP_EXTENSIONS):
             filename = secure_filename(zipFile.filename)
             zip_bytes = zipFile.read()
@@ -160,8 +161,10 @@ def upload_files():
                             if file_info.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
                                 with archive.open(file_info) as image_file:
                                     image_data = image_file.read()
+                                    image_key = f"{session_id}/ballots/{file_info.filename}"
+                                    upload_to_s3(BytesIO(image_data), bucket_name, image_key)
                                     try:
-                                        ocr_text = process_image(image_data)
+                                        ocr_text = process_image(image_data, file_info.filename, session_id)
                                         db_session.add(OCRResult(
                                             session_id=session_id,
                                             filename=file_info.filename,
@@ -199,92 +202,250 @@ def dashboard():
         flash('Please log in or create a session first.')
         return redirect(url_for('login'))
 
-    ocr_results = get_ocr_results_by_session(session_id)
-    item_pattern = re.compile(r"^\d{3}$")
+    db_session = get_db_session()
+
+    vote_records = (
+        db_session.query(BallotVotes)
+        .join(Ballot, BallotVotes.ballot_id == Ballot.id)
+        .filter(
+            Ballot.session_id == session_id,
+            Ballot.badge_status == 'readable',
+            Ballot.validity == True,
+            BallotVotes.is_valid == True,
+            BallotVotes.vote_status == 'readable'
+        )
+        .all()
+    )
 
     category_votes = defaultdict(list)
-    for result in ocr_results:
-        extracted_data = result.get("Extracted Text", [])
-        for entry in extracted_data:
-            category_id = entry.get("Category ID", "").strip().upper()
-            item_number = entry.get("Item Number", "").strip()
-            if category_id and item_pattern.match(item_number):
-                category_votes[category_id].append(item_number)
+
+    for vote in vote_records:
+        cleaned_vote = (vote.vote or "").strip()
+        if vote.category_id:
+            category_votes[vote.category_id.upper()].append(cleaned_vote)
 
     top3_per_category = {}
-    for category, items in category_votes.items():
-        counts = Counter(items)
-        top3 = counts.most_common(3)
-        top3_per_category[category] = top3
 
+    for category, votes in category_votes.items():
+        counts = Counter(votes)
+        top_votes = counts.most_common(3)  # top 3 votes, no unreadable category needed
+
+        top3_per_category[category] = top_votes
+
+    db_session.close()
     return render_template("a_dashboard.html", top3_per_category=top3_per_category)
 
 @app.route('/review')
 def review_dashboard():
-    session = SessionLocal()
-
-    error_ballots = session.query(Ballot).filter((Ballot.badge_id == None) | (Ballot.badge_id == '')).all()
-    unreadable_votes = session.query(BallotVotes).filter(BallotVotes.vote == 'unreadable').all()
-
-    session.close()
-    return render_template('a_review_db.html', error_ballots=error_ballots, unreadable_votes=unreadable_votes)
-
-
-@app.route('/fix_badge', methods=['POST'])
-def fix_badge():
-    ballot_id = request.form['ballot_id']
-    new_badge = request.form['badge_id']
     db_session = get_db_session()
-    ballot = db_session.query(Ballot).get(ballot_id)
-    if ballot:
-        ballot.badge_id = new_badge
-        db_session.commit()
+
+    ballots_with_badge_issues = (
+        db_session.query(Ballot)
+        .filter(Ballot.badge_status == 'unreadable')
+        .all()
+    )
+    badges_data = []
+    for ballot in ballots_with_badge_issues:
+        s3_url = None
+        if ballot.s3_key:
+            s3_url = s3.generate_presigned_url(
+                'get_object',
+                Params={'Bucket': bucket_name, 'Key': ballot.s3_key},
+                ExpiresIn=3600
+            )
+        badges_data.append({
+            'ballot_id': ballot.id,
+            'badge_id': ballot.badge_id,
+            's3_url': s3_url,
+        })
+
+    votes_with_errors = (
+        db_session.query(BallotVotes)
+        .join(Ballot, BallotVotes.ballot_id == Ballot.id)
+        .filter(
+            Ballot.badge_status == 'readable',
+            Ballot.validity == True,
+            BallotVotes.vote_status == 'unreadable',
+            BallotVotes.is_valid == True
+        )
+        .all()
+    )
+    votes_data = []
+    for vote in votes_with_errors:
+        s3_url = None
+        if vote.key:
+            s3_url = s3.generate_presigned_url(
+                'get_object',
+                Params={'Bucket': bucket_name, 'Key': vote.key},
+                ExpiresIn=3600
+            )
+        votes_data.append({
+            'vote_id': vote.id,
+            'category': vote.category_id,
+            'current_vote': vote.vote,
+            'badge_id': vote.badge_id,
+            's3_url': s3_url,
+            'ballot_id': vote.ballot_id
+        })
+
     db_session.close()
-    flash('Badge ID updated successfully')
-    return redirect(request.referrer)
+    return render_template('a_review_db.html', badges=badges_data, votes=votes_data)
 
 @app.route('/fix_vote', methods=['POST'])
 def fix_vote():
-    vote_id = request.form['vote_id']
-    new_vote = request.form['vote']
+    vote_id = request.form.get('vote_id')
+    new_vote = request.form.get('vote', '').strip()
+
+    if not vote_id or not new_vote:
+        flash('Invalid input. Please provide a vote.', 'error')
+        return redirect(request.referrer or url_for('review_dashboard'))
+
     db_session = get_db_session()
     vote = db_session.query(BallotVotes).get(vote_id)
-    if vote:
-        vote.vote = new_vote
-        db_session.commit()
+
+    if vote is None:
+        flash('Vote not found.', 'error')
+        db_session.close()
+        return redirect(request.referrer or url_for('review_dashboard'))
+
+    vote.vote = new_vote
+    vote.vote_status = 'readable'
+
+    if vote.key:
+        try:
+            s3.delete_object(Bucket=bucket_name, Key=vote.key)
+            vote.key = ""  # Clear the key after deletion
+        except Exception as e:
+            print(f"Failed to delete S3 object {vote.key}: {e}")
+
+    db_session.commit()
     db_session.close()
-    flash('Vote updated successfully')
-    return redirect(request.referrer)
+
+    flash(f'Vote updated successfully for badge {vote.badge_id}.', 'success')
+    return redirect(request.referrer or url_for('review_dashboard'))
+
+@app.route('/fix_badge', methods=['POST'])
+def fix_badge():
+    session_id = session.get('session_id')
+    ballot_id = request.form['ballot_id']
+    new_badge = request.form['badge_id'].strip()
+
+    db_session = get_db_session()
+    ballot = db_session.query(Ballot).get(ballot_id)
+    if not ballot:
+        flash('Ballot not found.')
+        db_session.close()
+        return redirect(request.referrer)
+
+    old_badge = ballot.badge_id
+    old_s3_key = ballot.s3_key
+
+    is_valid = badge_id_exists(session_id, new_badge)
+    is_duplicate = readable_badge_id_exists(session_id, new_badge)  # or however you check duplicates
+
+    if is_duplicate:
+        flash('Badge ID already exists.')
+        db_session.close()
+        return redirect(request.referrer)
+
+    if not is_valid:
+        flash('Badge ID does not exist.')
+        db_session.close()
+        return redirect(request.referrer)
+
+    ballot.badge_id = new_badge
+    ballot.badge_status = 'readable'
+    ballot.validity = is_valid
+    ballot.s3_key = ""
+    db_session.commit()
+
+    # Update all BallotVotes badge_id from old_badge to new_badge
+    votes = db_session.query(BallotVotes).filter(BallotVotes.badge_id == old_badge).all()
+    for vote in votes:
+        vote.badge_id = new_badge
+        vote.validity = is_valid
+    db_session.commit()
+
+    if old_s3_key:
+        try:
+            s3.delete_object(Bucket=bucket_name, Key=old_s3_key)
+        except Exception as e:
+            print(f"Failed to delete S3 object {old_s3_key}: {e}")
+
+    db_session.close()
+    flash('Badge ID updated successfully and validity checked.')
+    return redirect(url_for('review_dashboard'))
 
 @app.route('/delete_vote/<int:vote_id>')
 def delete_vote(vote_id):
     db_session = get_db_session()
     vote = db_session.query(BallotVotes).get(vote_id)
+
     if vote:
+        if vote.key:
+            try:
+                s3.delete_object(Bucket=bucket_name, Key=vote.key)
+            except Exception as e:
+                print(f"Error deleting vote image {vote.key} from S3:", e)
+
         db_session.delete(vote)
         db_session.commit()
+        flash('Vote deleted successfully', 'success')
+    else:
+        flash('Vote not found', 'error')
+
     db_session.close()
-    flash('Vote deleted successfully')
-    return redirect(request.referrer)
+    return redirect(request.referrer or url_for('review_dashboard'))
 
 @app.route('/delete_ballot/<int:ballot_id>')
 def delete_ballot(ballot_id):
     db_session = get_db_session()
     ballot = db_session.query(Ballot).get(ballot_id)
-    if ballot:
-        ocr_result = db_session.query(OCRResult).filter_by(session_id=ballot.session_id).first()
-        if ocr_result:
-            try:
-                s3.delete_object(Bucket=bucket_name, Key=ocr_result.filename)
-            except Exception as e:
-                print("Error deleting from S3:", e)
 
-        db_session.query(BallotVotes).filter_by(ballot_id=ballot.id).delete()
-        db_session.delete(ballot)
+    if ballot:
+        badge_id = ballot.badge_id
+        session_id = ballot.session_id
+
+        # Delete ballot image from S3
+        if ballot.s3_key:
+            try:
+                s3.delete_object(Bucket=bucket_name, Key=ballot.s3_key)
+            except Exception as e:
+                print(f"Error deleting ballot S3 image: {e}")
+
+        # Delete OCRResult S3 image and DB row
+        ocr_result = db_session.query(OCRResult).filter_by(session_id=session_id).first()
+        if ocr_result:
+            if ocr_result.filename:
+                try:
+                    s3.delete_object(Bucket=bucket_name, Key=ocr_result.filename)
+                except Exception as e:
+                    print(f"Error deleting OCR S3 image: {e}")
+            db_session.delete(ocr_result)
+
+        # Delete all BallotVotes with matching badge_id
+        votes = db_session.query(BallotVotes).filter_by(badge_id=badge_id).all()
+        for vote in votes:
+            if vote.key:
+                try:
+                    s3.delete_object(Bucket=bucket_name, Key=vote.key)
+                except Exception as e:
+                    print(f"Error deleting vote image {vote.key} from S3: {e}")
+            db_session.delete(vote)
+
+        # Delete all Ballots with same badge_id
+        ballots = db_session.query(Ballot).filter_by(badge_id=badge_id).all()
+        for b in ballots:
+            db_session.delete(b)
+
         db_session.commit()
+        flash(f'Deleted badge ID "{badge_id}", all associated ballots, votes, and OCR result.', 'success')
+    else:
+        flash('Ballot not found.', 'error')
+
     db_session.close()
-    flash('Ballot and associated data deleted')
-    return redirect(request.referrer)
+    return redirect(request.referrer or url_for('review_dashboard'))
+
 
 @app.route('/seed_review_test')
 def seed_review_test():

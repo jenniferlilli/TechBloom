@@ -1,4 +1,9 @@
-import easyocr #not used rn, will use if have time for a backup
+import io
+import os
+import uuid
+
+import boto3
+import easyocr #not used rn, will use, have time for a backup
 import cv2
 import numpy as np
 import timm
@@ -6,7 +11,8 @@ import torchvision.transforms as transforms
 import torch
 import torch.nn.functional as F
 from PIL import Image
-from db_utils import insert_vote, insert_badge, insert_category
+from db_utils import insert_vote, insert_badge
+from db_model import get_db_session, ValidBadgeIDs, Ballot
 
 model = timm.create_model("resnet18", pretrained=False, num_classes=10)
 model.conv1 = torch.nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
@@ -202,8 +208,9 @@ def preprocess(image):
     return binary
 
 def split_roi_into_digit_boxes(image, expected_rows=5):
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
+    # Step 1: Enhanced preprocessing
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     blurred = cv2.bilateralFilter(gray, 9, 75, 75)
 
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
@@ -217,6 +224,7 @@ def split_roi_into_digit_boxes(image, expected_rows=5):
         C=2
     )
 
+    # Step 2: Detect REG box
     contours, _ = cv2.findContours(binary.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     reg_rect = None
     max_area = 0
@@ -235,12 +243,17 @@ def split_roi_into_digit_boxes(image, expected_rows=5):
     x, y, w, h = reg_rect
     roi = image[y:y + h, x:x + w]
 
+    # Step 3: Clean horizontal underline detection
     gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    enhanced_roi = clahe.apply(gray_roi)
+
     th = cv2.adaptiveThreshold(
-        gray_roi, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+        enhanced_roi, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
         cv2.THRESH_BINARY_INV, blockSize=15, C=10
     )
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (25, 1))
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (30, 1))
     morph = cv2.morphologyEx(th, cv2.MORPH_OPEN, kernel, iterations=1)
 
     contours, _ = cv2.findContours(morph, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -248,7 +261,7 @@ def split_roi_into_digit_boxes(image, expected_rows=5):
     for cnt in contours:
         ux, uy, uw, uh = cv2.boundingRect(cnt)
         aspect = uw / uh if uh > 0 else 0
-        if 2 < aspect < 20 and 2 <= uh <= 8:
+        if 8 <= uw <= roi.shape[1] and 1 <= uh <= 6 and aspect > 10:
             underline_boxes.append((ux, uy, uw, uh))
 
     if len(underline_boxes) < expected_rows:
@@ -256,6 +269,7 @@ def split_roi_into_digit_boxes(image, expected_rows=5):
         return []
 
     underline_boxes = sorted(underline_boxes, key=lambda b: b[1])[:expected_rows]
+    left_x = min(b[0] for b in underline_boxes)
     left_x = min(b[0] for b in underline_boxes)
     right_x = max(b[0] + b[2] for b in underline_boxes)
 
@@ -274,11 +288,9 @@ def split_roi_into_digit_boxes(image, expected_rows=5):
             top_y = max([cv2.boundingRect(cnt)[1] + cv2.boundingRect(cnt)[3] for cnt in top_contours])
 
         cropped_row = roi[top_y:uy, left_x:right_x]
-
         row_gray = cv2.cvtColor(cropped_row, cv2.COLOR_BGR2GRAY)
 
-        _, row_binary = cv2.threshold(row_gray, 0, 255,
-                                      cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        _, row_binary = cv2.threshold(row_gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
         kernel_close = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
         closed = cv2.morphologyEx(row_binary, cv2.MORPH_CLOSE, kernel_close)
@@ -286,8 +298,7 @@ def split_roi_into_digit_boxes(image, expected_rows=5):
         kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
         cleaned = cv2.morphologyEx(closed, cv2.MORPH_OPEN, kernel_open)
 
-        digit_contours, _ = cv2.findContours(cleaned, cv2.RETR_EXTERNAL,
-                                             cv2.CHAIN_APPROX_SIMPLE)
+        digit_contours, _ = cv2.findContours(cleaned, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         digit_contours = sorted(digit_contours, key=lambda cnt: cv2.boundingRect(cnt)[0])
 
         combined_contours = []
@@ -326,7 +337,6 @@ def split_roi_into_digit_boxes(image, expected_rows=5):
                 pad_right = min(dx + dw + padding, cropped_row.shape[1])
 
                 digit = cropped_row[pad_top:pad_bottom, pad_left:pad_right]
-
                 digit_gray = cv2.cvtColor(digit, cv2.COLOR_BGR2GRAY)
 
                 digit_clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(4, 4))
@@ -339,17 +349,58 @@ def split_roi_into_digit_boxes(image, expected_rows=5):
                                         cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)),
                                         iterations=1)
 
-                cv2.rectangle(output,
-                              (left_x + pad_left, top_y + pad_top),
-                              (left_x + pad_right, top_y + pad_bottom),
-                              (0, 255, 0), 1)
-
                 digit_boxes.append(digit_clean)
 
-    print(f"Extracted {len(digit_boxes)} digits from REG box.")
-    return digit_boxes
+    print(f"[✓] Extracted {len(digit_boxes)} digits from REG box.")
+    return digit_boxes, roi
 
-def process_badge_id(image, model):
+
+def upload_badge_to_s3(image, file_name, object_prefix="low_confidence_badge"):
+    s3 = boto3.client("s3")
+    success, encoded_image = cv2.imencode(".jpg", image)
+    if not success:
+        raise ValueError("Failed to encode image to JPEG format.")
+    buffer = io.BytesIO(encoded_image.tobytes())
+
+    base_name = os.path.splitext(file_name)[0]
+    key = f"{object_prefix}/{base_name}.jpg"
+
+    s3.upload_fileobj(
+        Fileobj=buffer,
+        Bucket='techbloom-ballots',
+        Key=key,
+        ExtraArgs={"ContentType": "image/jpeg"}
+    )
+
+    print(f"[S3] Uploaded to s3://techbloom-ballots/{key}")
+    return key
+
+def upload_vote_to_s3(image, file_name, object_prefix="low_confidence_vote"):
+    s3 = boto3.client("s3")
+    success, encoded_image = cv2.imencode(".jpg", image)
+    if not success:
+        raise ValueError("Failed to encode image to JPEG format.")
+    buffer = io.BytesIO(encoded_image.tobytes())
+
+    base_name = os.path.splitext(file_name)[0]
+
+    # Generate a unique UUID string
+    unique_id = str(uuid.uuid4())
+
+    # Construct the key with UUID appended
+    key = f"{object_prefix}/{base_name}_{unique_id}.jpg"
+
+    s3.upload_fileobj(
+        Fileobj=buffer,
+        Bucket='techbloom-ballots',
+        Key=key,
+        ExtraArgs={"ContentType": "image/jpeg"}
+    )
+
+    print(f"[S3] Uploaded to s3://techbloom-ballots/{key}")
+    return key
+
+def process_badge_id(image, model, file_name):
     transform = transforms.Compose([
         transforms.ToPILImage(),
         transforms.ToTensor(),
@@ -358,10 +409,10 @@ def process_badge_id(image, model):
 
     h, w = image.shape[:2]
     roi = image[0:int(h * 0.25), int(w * 0.65):w]
-    digit_boxes = split_roi_into_digit_boxes(roi)
+    digit_boxes, extracted_img = split_roi_into_digit_boxes(roi)
 
     digit_string = ""
-
+    low_confidence = False
     for i, digit_img in enumerate(digit_boxes):
         if len(digit_img.shape) == 3:
             digit_img = cv2.cvtColor(digit_img, cv2.COLOR_BGR2GRAY)
@@ -394,10 +445,19 @@ def process_badge_id(image, model):
         input_tensor = transform(processed).unsqueeze(0)
         with torch.no_grad():
             output = model(input_tensor)
-            pred = output.argmax(dim=1, keepdim=True)
-            digit_string += str(pred.item())
-
-    return digit_string
+            probs = F.softmax(output, dim=1)[0].cpu().numpy()
+            pred = np.argmax(probs)
+            confidence = probs[pred]
+        if confidence < 0.7:
+            digit_string += "?"
+            low_confidence = True
+        else:
+            digit_string += str(pred)
+    if low_confidence or not len(digit_string) == 5:
+        key = upload_badge_to_s3(extracted_img, file_name)
+        return digit_string, key
+    else:
+        return digit_string, ""
 
 def center_digit_proportional(img):
     pts = cv2.findNonZero(img)
@@ -476,10 +536,11 @@ def preprocess_cell(cell_img):
     resized = cv2.resize(thresh, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
     return resized
 
-def extract_digits(cell_img):
+def extract_digits(cell_img, file_name):
     h, w = cell_img.shape[:2]
     segment_width = w // 3
     digits = []
+    good_vote = True
     for i in range(3):
         start_x = i * segment_width
         end_x = (i + 1) * segment_width if i < 2 else w
@@ -507,16 +568,22 @@ def extract_digits(cell_img):
             print(f"Segment {i} confidences: " + ", ".join(f"{d}:{p:.2f}" for d, p in enumerate(probabilities)))
             if confidence < 0.70:
                 digits.append('?')
+                good_vote = False
             else:
                 digits.append(str(pred_class))
         else:
             print(f"No digit extracted for segment {i}")
             digits.append('?')
-
-    print(f"Full 3-digit result: {''.join(digits)}")
-    return ''.join(digits)
+    final = ''.join(digits)
+    print(f"Full 3-digit result: {final}")
+    key = ""
+    if not len(final) == 3:
+        good_vote = False
+    if not good_vote:
+        key = upload_vote_to_s3(cell_img, file_name)
+    return final, key
     
-def extract_text_from_cells(image, rows, count):
+def extract_text_from_cells(image, rows, count, file_name):
     extracted = []
     CATEGORY_IDS = [
     "A", "B", "C", "D", "E", "G", "H", "I", "J", "F",
@@ -532,7 +599,7 @@ def extract_text_from_cells(image, rows, count):
             cell_img = image[y:y + h, x:x + w]
             if i == 2:
                 processed = preprocess_cell(cell_img)
-                item_number = extract_digits(processed)
+                item_number, key = extract_digits(processed, file_name)
                 cells.append(item_number)
 
         cat_id = CATEGORY_IDS[count]
@@ -553,22 +620,49 @@ def extract_text_from_cells(image, rows, count):
                 'Item Number' : item_no,
                 'Status' : 'unreadable'
             })
-    return extracted
+    return extracted, key
 
-def process_image(image_bytes, session_id: str):
-    image = Image.open(image_bytes).convert("RGB")
+def badge_id_exists(session_id: str, badge_id: str) -> bool:
+    session = get_db_session()
+    try:
+        exists = session.query(ValidBadgeIDs).filter(
+            ValidBadgeIDs.session_id == session_id,
+            ValidBadgeIDs.badge_id == badge_id
+        ).first() is not None
+    finally:
+        session.close()
+    return exists
+
+def readable_badge_id_exists(session_id: str, badge_id: str) -> bool:
+    session = get_db_session()
+    try:
+        exists = session.query(Ballot).filter(
+            Ballot.session_id == session_id,
+            Ballot.badge_id == badge_id,
+            Ballot.badge_status == 'readable'
+        ).first() is not None
+    finally:
+        session.close()
+    return exists
+
+def process_image(image_bytes, file_name, session_id: str):
+    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     image_np = np.array(image)
     image_cv = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
 
     image_cv = deskew_image(image_cv)
-    badge_id = process_badge_id(image_cv, model)
+    badge_id, key = process_badge_id(image_cv, model, file_name)
+    validity = True
+
+    if key == "" and (badge_id_exists(session_id, badge_id) and not readable_badge_id_exists(session_id, badge_id)):
+        insert_badge(session_id, badge_id, 'readable', key, validity)
+    elif key == "" and ((not badge_id_exists(session_id, badge_id)) or readable_badge_id_exists(session_id, badge_id)):
+        validity = False
+        insert_badge(session_id, badge_id, 'readable', key, validity)
+    else:
+        insert_badge(session_id, badge_id, 'unreadable', key, validity)
 
     print(f"Extracted Badge ID: {badge_id}")
-
-    if len(badge_id) == 5 and badge_id.find("?") == -1: #PROB EDIT WITH MORE CRITERIA
-        insert_badge(session_id, badge_id, 'readable')
-    else:
-        insert_badge(session_id, badge_id, 'unreadable')
 
     boxes = detect_table_cells(image_cv)
     boxes = filter_valid_boxes(boxes, min_y=450)
@@ -585,13 +679,12 @@ def process_image(image_bytes, session_id: str):
     for table_idx, rows in enumerate(tables):
         if table_idx == 0:
             rows = rows[1:]
-        extracted_cells = extract_text_from_cells(image_cv, rows, count)
+        extracted_cells, key = extract_text_from_cells(image_cv, rows, count, file_name)
         for item in extracted_cells:
             category_id = item['Category ID']
             vote = item['Item Number']
             status = item['Status']
-            insert_category(category_id)
-            insert_vote(category_id, vote, status)
+            insert_vote(badge_id, file_name, category_id, vote, status, validity, key)
             all_extracted.append(item)
         count += len(rows)
     return all_extracted

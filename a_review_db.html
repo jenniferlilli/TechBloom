@@ -60,43 +60,55 @@
       font-style: italic;
       margin-top: 20px;
     }
+    img.preview {
+      max-width: 150px;
+      display: block;
+    }
   </style>
 </head>
 <body>
   <h2>Review Dashboard</h2>
 
-  <!-- Section 1: Ballots with Missing Badge IDs -->
+  <!-- Section 1: Ballots with Unreadable Badge IDs -->
   <div class="section">
-    <h3>Ballots with Missing Badge IDs</h3>
-    {% if error_ballots %}
+    <h3>Ballots with Unreadable Badge IDs</h3>
+    {% if badges %}
       <table>
         <thead>
           <tr>
-            <th>Ballot Number</th>
+            <th>Ballot ID</th>
             <th>Badge ID</th>
+            <th>Image</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
-          {% for ballot in error_ballots %}
+          {% for badge in badges %}
           <tr>
-            <td>{{ ballot.id }}</td>
+            <td>{{ badge.ballot_id }}</td>
             <td>
-              {% if ballot.badge_id %}
-                {{ ballot.badge_id }}
+              {% if badge.badge_id %}
+                {{ badge.badge_id }}
               {% else %}
                 <span style="color: red;">(empty)</span>
               {% endif %}
             </td>
+            <td>
+              {% if badge.s3_url %}
+                <img src="{{ badge.s3_url }}" class="preview">
+              {% else %}
+                No image
+              {% endif %}
+            </td>
             <td style="white-space: nowrap;">
-              <!-- FIX BADGE FORM -->
-              <form action="{{ url_for('fix_badge') }}" method="POST" style="display:inline-block; margin-right: 50px;">
-                <input type="hidden" name="ballot_id" value="{{ ballot.id }}">
+              <!-- Fix Badge -->
+              <form action="{{ url_for('fix_badge') }}" method="POST" style="display:inline-block; margin-right: 20px;">
+                <input type="hidden" name="ballot_id" value="{{ badge.ballot_id }}">
                 <input type="text" name="badge_id" placeholder="Enter badge ID" required>
                 <button type="submit" class="btn btn-reprocess">Fix</button>
               </form>
-              <!-- DELETE BALLOT FORM -->
-              <form action="{{ url_for('delete_ballot', ballot_id=ballot.id) }}" method="GET" style="display:inline-block;">
+              <!-- Delete Ballot -->
+              <form action="{{ url_for('delete_ballot', ballot_id=badge.ballot_id) }}" method="GET" style="display:inline-block;">
                 <button type="submit" class="btn btn-delete">Delete</button>
               </form>
             </td>
@@ -105,38 +117,48 @@
         </tbody>
       </table>
     {% else %}
-      <p class="no-data">No ballots with missing Badge IDs.</p>
+      <p class="no-data">No ballots with unreadable badge IDs.</p>
     {% endif %}
   </div>
 
   <!-- Section 2: Unreadable Votes -->
   <div class="section">
     <h3>Unreadable Votes</h3>
-    {% if unreadable_votes %}
+    {% if votes %}
       <table>
         <thead>
           <tr>
-            <th>Vote Number</th>
-            <th>Ballot Number</th>
-            <th>Vote Value</th>
+            <th>Vote ID</th>
+            <th>Ballot ID</th>
+            <th>Category</th>
+            <th>Current Vote</th>
+            <th>Image</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
-          {% for vote in unreadable_votes %}
+          {% for vote in votes %}
           <tr>
-            <td>{{ vote.id }}</td>
+            <td>{{ vote.vote_id }}</td>
             <td>{{ vote.ballot_id }}</td>
-            <td style="color: red;">{{ vote.vote }}</td>
+            <td>{{ vote.category }}</td>
+            <td style="color: red;">{{ vote.current_vote }}</td>
+            <td>
+              {% if vote.s3_url %}
+                <img src="{{ vote.s3_url }}" class="preview">
+              {% else %}
+                No image
+              {% endif %}
+            </td>
             <td style="white-space: nowrap;">
-              <!-- FIX VOTE FORM -->
-              <form action="{{ url_for('fix_vote') }}" method="POST" style="display:inline-block; margin-right: 50px;">
-                <input type="hidden" name="vote_id" value="{{ vote.id }}">
+              <!-- Fix Vote -->
+              <form action="{{ url_for('fix_vote') }}" method="POST" style="display:inline-block; margin-right: 20px;">
+                <input type="hidden" name="vote_id" value="{{ vote.vote_id }}">
                 <input type="text" name="vote" placeholder="Enter correct vote" required>
                 <button type="submit" class="btn btn-reprocess">Fix</button>
               </form>
-              <!-- DELETE VOTE FORM -->
-              <form action="{{ url_for('delete_vote', vote_id=vote.id) }}" method="GET" style="display:inline-block; margin: 0">
+              <!-- Delete Vote -->
+              <form action="{{ url_for('delete_vote', vote_id=vote.vote_id) }}" method="GET" style="display:inline-block;">
                 <button type="submit" class="btn btn-delete">Delete</button>
               </form>
             </td>

@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from db_model import (
     UserSession, ValidBadgeIDs, UploadedZip, OCRResult,
-    BallotVotes, BallotCategory, Ballot,
+    BallotVotes, Ballot,
     SessionLocal
 )
 
@@ -33,24 +33,17 @@ def insert_ocr_result(session_id: str, filename: str, extracted_text: str):
         session.add(ocr_result)
         session.commit()
 
-def insert_vote(category_id: str, vote: str, status: str):
+def insert_vote(badge_id: str, file_name: str, category_id: str, vote: str, status: str, validity: bool, key: str):
     with SessionLocal() as session:
-        vote_obj = BallotVotes(category_id=category_id, vote=vote, vote_status=status)
+        vote_obj = BallotVotes(badge_id=badge_id, name=file_name, category_id=category_id, vote=vote, vote_status=status, is_valid=validity, key=key)
         session.add(vote_obj)
         session.commit()
 
-def insert_category(category_id: str):
+def insert_badge(session_id: str, badge_id: str, status: str, key: str, validity: bool):
     with SessionLocal() as session:
-        category = BallotCategory(category_id=category_id)
-        session.add(category)
-        session.commit()
-
-def insert_badge(session_id: str, badge_id: str, status: str):
-    with SessionLocal() as session:
-        ballot = Ballot(session_id=session_id, badge_id=badge_id, badge_status=status)
+        ballot = Ballot(session_id=session_id, badge_id=badge_id, badge_status=status, s3_key=key, validity=validity)
         session.add(ballot)
         session.commit()
-
 
 def get_ocr_results_by_session(session_id: str):
     

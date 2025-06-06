@@ -1,13 +1,12 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <link href="https://fonts.googleapis.com/css?family=Segoe+UI" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css?family=Segoe+UI" rel="stylesheet" />
   <title>OCR Dashboard - ICAST Fishing Showcase Winners</title>
   <style>
     html {
       font-size: 16px;
     }
-
     body {
       font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
       text-align: center;
@@ -18,77 +17,74 @@
       background-position: center;
       background-size: cover;
       background-attachment: fixed;
+      position: relative;
+      color: #300F18;
     }
-
     body::after {
       content: "";
       position: fixed;
       inset: 0;
-      width: 100vw;
-      height: 100vh;
       background-color: rgba(19, 11, 17, 0.4);
-      z-index: -3;
+      z-index: -1;
     }
-
     h1 {
-      text-align: center;
       margin-bottom: 30px;
       color: #F6F4F4;
     }
-
     .grid-container {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
       gap: 20px;
       filter: drop-shadow(0 0 0.55rem #675158);
     }
-
     .category-table {
       border: 1px solid #6C4343;
-      overflow: hidden;
-      box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.1);
       background-color: #fafafa;
+      box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
     }
-
     .category-table h2 {
       margin: 0;
       background-color: #FAEBEF;
       padding: 10px;
       font-size: 18px;
-      text-align: center;
       font-weight: bold;
       border-bottom: 1px solid #FAEBEF;
       color: #300F18;
     }
-
     table {
       width: 100%;
       border-collapse: collapse;
     }
-
     th, td {
       padding: 10px;
       border-top: 1px solid #ddd;
       vertical-align: middle;
-      color: #300F18;
     }
-
     th {
       background-color: #ffffff;
       font-weight: 600;
       text-align: center;
     }
-
     tr:hover {
       background-color: #f9f9f9;
     }
-
+    .placement-cell {
+      width: 60px;
+      text-align: left;
+      white-space: nowrap;
+      font-weight: normal;
+      user-select: none;
+    }
+    .item-cell {
+      text-align: center;
+      font-weight: 600;
+    }
     .tooltip {
       position: relative;
       display: inline-block;
-      cursor: pointer;
+      cursor: default;
     }
-
     .tooltip .tooltiptext {
       visibility: hidden;
       width: 110px;
@@ -98,7 +94,7 @@
       border-radius: 6px;
       padding: 6px 8px;
       position: absolute;
-      z-index: 1;
+      z-index: 10;
       bottom: 125%;
       left: 50%;
       margin-left: -55px;
@@ -107,40 +103,26 @@
       font-size: 14px;
       pointer-events: none;
     }
-
     .tooltip:hover .tooltiptext {
       visibility: visible;
       opacity: 1;
     }
-
-    .placement-cell {
-      width: 60px;
-      text-align: left;
-      white-space: nowrap;
-      font-weight: normal;
-      user-select: none;
-    }
-
-    .item-cell {
-      text-align: center;
-      font-weight: 600;
-    }
-
     #bottom-logo {
       display: block;
       width: 250px;
       opacity: 0.9;
+      margin: 3rem auto 0 auto;
       z-index: 1;
     }
-
     .button-row {
       display: flex;
       justify-content: center;
       gap: 1rem;
       flex-wrap: wrap;
       margin: 1rem 0 3rem 0;
+      z-index: 2;
+      position: relative;
     }
-
     .button-row button {
       flex: 1 1 200px;
       max-width: 280px;
@@ -154,10 +136,8 @@
       transition: background-color 0.3s ease;
       font-weight: bold;
     }
-
     .button-row button:hover {
       background-color: #EAA5B0;
-      border-color: #EAA5B0;
     }
   </style>
 </head>
@@ -165,7 +145,7 @@
   <h1>OCR Dashboard - ICAST Fishing Showcase Winners</h1>
 
   <div class="button-row">
-    <button type="button" onclick="location.href='/upload-file'">Go to Upload Files</button>
+    <button type="button" onclick="location.href='{{ url_for('upload_files') }}'">Go to Upload Files</button>
     <button type="button" onclick="location.href='{{ url_for('review_dashboard') }}'">Go to Review Dashboard</button>
   </div>
 
@@ -176,7 +156,7 @@
       <table>
         <thead>
           <tr>
-            <th></th>
+            <th>Place</th>
             <th>Item Number</th>
           </tr>
         </thead>
@@ -185,11 +165,13 @@
           <tr>
             <td class="placement-cell">
               {% if loop.index == 1 %}
-              🥇 1st
+                🥇 1st
               {% elif loop.index == 2 %}
-              🥈 2nd
+                🥈 2nd
               {% elif loop.index == 3 %}
-              🥉 3rd
+                🥉 3rd
+              {% else %}
+                {{ loop.index }}th
               {% endif %}
             </td>
             <td class="item-cell">
@@ -206,6 +188,6 @@
     {% endfor %}
   </div>
 
-  <img src="{{ url_for('static', filename='light_logo.png') }}" id="bottom-logo">
+  <img src="{{ url_for('static', filename='light_logo.png') }}" id="bottom-logo" alt="Light Logo" />
 </body>
 </html>

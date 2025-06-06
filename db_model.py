@@ -1,5 +1,5 @@
 # models.py
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, func
+from sqlalchemy import create_engine, Column, Integer, Boolean, String, ForeignKey, DateTime, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session
 
@@ -17,7 +17,9 @@ class Ballot(Base):
     session_id = Column(String, ForeignKey('sessions.id'))
     badge_id = Column(String)
     badge_status = Column(String)
+    s3_key = Column(String)
     name = Column(String)
+    validity = Column(Boolean)
     created_at = Column(DateTime, server_default=func.current_timestamp())
 
 class UploadedZip(Base):
@@ -38,32 +40,18 @@ class OCRResult(Base):
     session_id = Column(String, ForeignKey('sessions.id'))
     filename = Column(String)
     extracted_text = Column(String)  # for debugging
-    
-
-class BallotCategory(Base):
-    __tablename__ = 'categories'
-    id = Column(Integer, primary_key = True, autoincrement = True)
-    category_id = Column(String)
 
 class BallotVotes(Base):
     __tablename__ = 'votes'
     id = Column(Integer, primary_key=True, autoincrement=True)
+    badge_id = Column(String)
     ballot_id = Column(Integer, ForeignKey('ballots.id'))
-    category_id = Column(String, ForeignKey('categories.category_id'))
+    name = Column(String)
+    category_id = Column(String)
     vote = Column(String)
+    key = Column(String)
     vote_status = Column(String)
-
-def get_all_ballots_with_missing_badge():
-    session = get_db_session()
-    ballots = session.query(Ballot).filter(Ballot.badge_status == 'unreadable').all()
-    session.close()
-    return ballots
-
-def get_all_unreadable_votes():
-    session = get_db_session()
-    votes = session.query(BallotVotes).filter(BallotVotes.vote_status == 'unreadable').all()
-    session.close()
-    return votes
+    is_valid = Column(Boolean)
 
 engine = create_engine('sqlite:///data.db')
 Base.metadata.drop_all(bind=engine)
