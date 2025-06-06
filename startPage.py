@@ -287,7 +287,7 @@ def review_dashboard():
             's3_url': s3_url,
             'ballot_id': vote.ballot_id
         })
-
+    print(votes_data)
     db_session.close()
     return render_template('a_review_db.html', badges=badges_data, votes=votes_data)
 

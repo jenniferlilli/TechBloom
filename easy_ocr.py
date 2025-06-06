@@ -566,7 +566,7 @@ def extract_digits(cell_img, file_name):
 
             print(f"Segment {i} predicted digit: {pred_class}")
             print(f"Segment {i} confidences: " + ", ".join(f"{d}:{p:.2f}" for d, p in enumerate(probabilities)))
-            if confidence < 0.70:
+            if confidence < 0.30:
                 digits.append('?')
                 good_vote = False
             else:
