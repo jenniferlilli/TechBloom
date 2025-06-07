@@ -310,6 +310,7 @@ def fix_vote():
 
     vote.vote = new_vote
     vote.vote_status = 'readable'
+    badge_id - vote.badge_id
 
     if vote.key:
         try:
@@ -321,8 +322,8 @@ def fix_vote():
     db_session.commit()
     db_session.close()
 
-    flash(f'Vote updated successfully for badge {vote.badge_id}.', 'success')
-    return redirect(request.referrer or url_for('review_dashboard'))
+    flash(f'Vote updated successfully for badge {badge_id}.', 'success')
+    return redirect(request.referrer)
 
 @app.route('/fix_badge', methods=['POST'])
 def fix_badge():
@@ -395,7 +396,7 @@ def delete_vote(vote_id):
         flash('Vote not found', 'error')
 
     db_session.close()
-    return redirect(request.referrer or url_for('review_dashboard'))
+    return redirect(request.referrer)
 
 @app.route('/delete_ballot/<int:ballot_id>')
 def delete_ballot(ballot_id):
