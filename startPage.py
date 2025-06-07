@@ -4,6 +4,7 @@ import boto3
 import json
 import re
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+from sqlalchemy import func, desc
 from werkzeug.utils import secure_filename
 from db_model import (
     ValidBadgeIDs,
@@ -194,7 +195,6 @@ def upload_files():
     db_session.close()
     return render_template('a_upload.html', joined_existing=joined_existing and (existing_badges or existing_zip))
 
-
 @app.route('/dashboard')
 def dashboard():
     session_id = session.get("session_id")
@@ -206,7 +206,7 @@ def dashboard():
 
     vote_records = (
         db_session.query(BallotVotes)
-        .join(Ballot, BallotVotes.ballot_id == Ballot.id)
+        .join(Ballot, BallotVotes.badge_id == Ballot.badge_id)
         .filter(
             Ballot.session_id == session_id,
             Ballot.badge_status == 'readable',
@@ -231,7 +231,7 @@ def dashboard():
         top_votes = counts.most_common(3)  # top 3 votes, no unreadable category needed
 
         top3_per_category[category] = top_votes
-
+    print(top3_per_category)
     db_session.close()
     return render_template("a_dashboard.html", top3_per_category=top3_per_category)
 
@@ -254,14 +254,14 @@ def review_dashboard():
                 ExpiresIn=3600
             )
         badges_data.append({
-            'ballot_id': ballot.id,
+            'name': ballot.name,
             'badge_id': ballot.badge_id,
             's3_url': s3_url,
         })
 
     votes_with_errors = (
         db_session.query(BallotVotes)
-        .join(Ballot, BallotVotes.ballot_id == Ballot.id)
+        .join(Ballot, BallotVotes.badge_id == Ballot.badge_id)
         .filter(
             Ballot.badge_status == 'readable',
             Ballot.validity == True,
@@ -285,7 +285,7 @@ def review_dashboard():
             'current_vote': vote.vote,
             'badge_id': vote.badge_id,
             's3_url': s3_url,
-            'ballot_id': vote.ballot_id
+            'name': vote.name
         })
     print(votes_data)
     db_session.close()
@@ -445,23 +445,6 @@ def delete_ballot(ballot_id):
 
     db_session.close()
     return redirect(request.referrer or url_for('review_dashboard'))
-
-
-@app.route('/seed_review_test')
-def seed_review_test():
-    session = SessionLocal()
-
-    bad_ballot = Ballot(session_id="test_session", badge_id='', name="Test Ballot")
-    session.add(bad_ballot)
-    session.flush()
-
-    unreadable_vote = BallotVotes(ballot_id=bad_ballot.id, category_id='A', vote='unreadable')
-    session.add(unreadable_vote)
-
-    session.commit()
-    session.close()
-
-    return "Seeded dummy review data"
 
 if __name__ == '__main__':
     print("Starting Flask app…")

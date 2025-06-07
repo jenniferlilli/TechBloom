@@ -566,7 +566,7 @@ def extract_digits(cell_img, file_name):
 
             print(f"Segment {i} predicted digit: {pred_class}")
             print(f"Segment {i} confidences: " + ", ".join(f"{d}:{p:.2f}" for d, p in enumerate(probabilities)))
-            if confidence < 0.30:
+            if confidence < 0.70:
                 digits.append('?')
                 good_vote = False
             else:
@@ -595,6 +595,7 @@ def extract_text_from_cells(image, rows, count, file_name):
     for row in rows:
         row = sorted(row, key=lambda b: b[0])
         cells = []
+        key = ""
         for i, (x, y, w, h) in enumerate(row):
             cell_img = image[y:y + h, x:x + w]
             if i == 2:
@@ -611,16 +612,18 @@ def extract_text_from_cells(image, rows, count, file_name):
             extracted.append({
                 'Category ID': cat_id,
                 'Item Number': item_no,
-                'Status' : 'readable'
+                'Status' : 'readable',
+                'Key' : key
             })
         else:
             print(f"Not valid vote {item_no}.")
             extracted.append({
                 'Category ID': cat_id,
                 'Item Number' : item_no,
-                'Status' : 'unreadable'
+                'Status' : 'unreadable',
+                'Key' : key
             })
-    return extracted, key
+    return extracted
 
 def badge_id_exists(session_id: str, badge_id: str) -> bool:
     session = get_db_session()
@@ -679,11 +682,12 @@ def process_image(image_bytes, file_name, session_id: str):
     for table_idx, rows in enumerate(tables):
         if table_idx == 0:
             rows = rows[1:]
-        extracted_cells, key = extract_text_from_cells(image_cv, rows, count, file_name)
+        extracted_cells = extract_text_from_cells(image_cv, rows, count, file_name)
         for item in extracted_cells:
             category_id = item['Category ID']
             vote = item['Item Number']
             status = item['Status']
+            key = item ['Key']
             insert_vote(badge_id, file_name, category_id, vote, status, validity, key)
             all_extracted.append(item)
         count += len(rows)
