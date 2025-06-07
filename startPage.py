@@ -62,6 +62,10 @@ def is_junk_file(file_info):
 def login():
     return render_template('a_login.html')
 
+@app.route('/logout')
+def logout():
+    return render_template('a_login.html')
+
 @app.route('/create-session', methods=['GET', 'POST'])
 def create_session():
     if request.method == 'POST':
@@ -160,6 +164,12 @@ def upload_files():
                             if is_junk_file(file_info):
                                 continue
                             if file_info.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+                                existing_file = db_session.query(OCRResult).filter_by(filename=file_info.filename,
+                                                                                      session_id=session_id).first()
+                                if existing_file:
+                                    print(f"Skipping duplicate file: {file_info.filename}")
+                                    continue
+
                                 with archive.open(file_info) as image_file:
                                     image_data = image_file.read()
                                     image_key = f"{session_id}/ballots/{file_info.filename}"
@@ -171,10 +181,10 @@ def upload_files():
                                             filename=file_info.filename,
                                             extracted_text=json.dumps(ocr_text)
                                         ))
+                                        db_session.commit()
                                         processed_count += 1
                                     except Exception as e:
                                         print(f"OCR failed for {file_info.filename}: {e}")
-                        db_session.commit()
                         flash(f'Successfully processed {processed_count} ballot images.')
                 except zipfile.BadZipFile:
                     flash('Invalid ZIP file.')
@@ -255,6 +265,7 @@ def review_dashboard():
             )
         badges_data.append({
             'name': ballot.name,
+            'ballot_id' : ballot.id,
             'badge_id': ballot.badge_id,
             's3_url': s3_url,
         })
@@ -293,6 +304,7 @@ def review_dashboard():
 
 @app.route('/fix_vote', methods=['POST'])
 def fix_vote():
+    session_id = session.get('session_id')
     vote_id = request.form.get('vote_id')
     new_vote = request.form.get('vote', '').strip()
 
@@ -319,9 +331,9 @@ def fix_vote():
             print(f"Failed to delete S3 object {vote.key}: {e}")
 
     db_session.commit()
-    db_session.close()
 
     flash(f'Vote updated successfully for badge {vote.badge_id}.', 'success')
+    db_session.close()
     return redirect(request.referrer or url_for('review_dashboard'))
 
 @app.route('/fix_badge', methods=['POST'])
@@ -337,11 +349,10 @@ def fix_badge():
         db_session.close()
         return redirect(request.referrer)
 
-    old_badge = ballot.badge_id
     old_s3_key = ballot.s3_key
 
     is_valid = badge_id_exists(session_id, new_badge)
-    is_duplicate = readable_badge_id_exists(session_id, new_badge)  # or however you check duplicates
+    is_duplicate = readable_badge_id_exists(session_id, new_badge)
 
     if is_duplicate:
         flash('Badge ID already exists.')
@@ -359,8 +370,7 @@ def fix_badge():
     ballot.s3_key = ""
     db_session.commit()
 
-    # Update all BallotVotes badge_id from old_badge to new_badge
-    votes = db_session.query(BallotVotes).filter(BallotVotes.badge_id == old_badge).all()
+    votes = db_session.query(BallotVotes).filter(BallotVotes.ballot_id == ballot_id).all()
     for vote in votes:
         vote.badge_id = new_badge
         vote.validity = is_valid
@@ -403,6 +413,7 @@ def delete_ballot(ballot_id):
     ballot = db_session.query(Ballot).get(ballot_id)
 
     if ballot:
+        ballot_id = ballot.id
         badge_id = ballot.badge_id
         session_id = ballot.session_id
 
@@ -414,7 +425,7 @@ def delete_ballot(ballot_id):
                 print(f"Error deleting ballot S3 image: {e}")
 
         # Delete OCRResult S3 image and DB row
-        ocr_result = db_session.query(OCRResult).filter_by(session_id=session_id).first()
+        ocr_result = db_session.query(OCRResult).filter_by(session_id=session_id, filename=ballot.name).first()
         if ocr_result:
             if ocr_result.filename:
                 try:
@@ -424,7 +435,7 @@ def delete_ballot(ballot_id):
             db_session.delete(ocr_result)
 
         # Delete all BallotVotes with matching badge_id
-        votes = db_session.query(BallotVotes).filter_by(badge_id=badge_id).all()
+        votes = db_session.query(BallotVotes).filter_by(ballot_id=ballot_id).all()
         for vote in votes:
             if vote.key:
                 try:
@@ -434,9 +445,7 @@ def delete_ballot(ballot_id):
             db_session.delete(vote)
 
         # Delete all Ballots with same badge_id
-        ballots = db_session.query(Ballot).filter_by(badge_id=badge_id).all()
-        for b in ballots:
-            db_session.delete(b)
+        db_session.delete(ballot)
 
         db_session.commit()
         flash(f'Deleted badge ID "{badge_id}", all associated ballots, votes, and OCR result.', 'success')

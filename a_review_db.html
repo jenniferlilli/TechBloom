@@ -67,6 +67,29 @@
   </style>
 </head>
 <body>
+<!-- Flash messages -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div id="flash-messages" style="position: fixed; top: 10px; right: 10px; z-index: 9999;">
+        {% for category, message in messages %}
+          <div
+            style="
+              padding: 10px 20px;
+              margin-bottom: 10px;
+              border-radius: 5px;
+              color: white;
+              background-color: {% if category == 'success' %}#2ecc71{% else %}#e74c3c{% endif %};
+              box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+              min-width: 200px;
+              font-weight: bold;
+            ">
+            {{ message }}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
   <h2>Review Dashboard</h2>
 
   <!-- Section 1: Ballots with Unreadable Badge IDs -->
@@ -76,7 +99,7 @@
       <table>
         <thead>
           <tr>
-            <th>Ballot ID</th>
+            <th>Ballot Name</th>
             <th>Badge ID</th>
             <th>Image</th>
             <th>Actions</th>
@@ -85,7 +108,7 @@
         <tbody>
           {% for badge in badges %}
           <tr>
-            <td>{{ badge.ballot_id }}</td>
+            <td>{{ badge.name }}</td>
             <td>
               {% if badge.badge_id %}
                 {{ badge.badge_id }}
@@ -129,7 +152,7 @@
         <thead>
           <tr>
             <th>Vote ID</th>
-            <th>Ballot ID</th>
+            <th>Ballot Name</th>
             <th>Category</th>
             <th>Current Vote</th>
             <th>Image</th>
@@ -140,7 +163,7 @@
           {% for vote in votes %}
           <tr>
             <td>{{ vote.vote_id }}</td>
-            <td>{{ vote.ballot_id }}</td>
+            <td>{{ vote.name }}</td>
             <td>{{ vote.category }}</td>
             <td style="color: red;">{{ vote.current_vote }}</td>
             <td>
@@ -170,5 +193,13 @@
       <p class="no-data">No unreadable votes found.</p>
     {% endif %}
   </div>
+<script>
+  setTimeout(() => {
+    const flashContainer = document.getElementById('flash-messages');
+    if (flashContainer) {
+      flashContainer.style.display = 'none';
+    }
+  }, 3000);  // 3000ms = 3 seconds
+</script>
 </body>
 </html>

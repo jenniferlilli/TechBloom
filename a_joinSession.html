@@ -1,144 +1,185 @@
 <!DOCTYPE html>
-<html>
-<head><title>Join Session</title></head>
-<link href='https://fonts.googleapis.com/css?family=Segoe UI' rel='stylesheet'>
-    <style>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Join Session</title>
+  <link href="https://fonts.googleapis.com/css?family=Segoe+UI&display=swap" rel="stylesheet" />
+  <style>
+    /* Base font size for scaling */
     html {
-	font-size: 16px;
+      font-size: 16px;
+      box-sizing: border-box;
     }
+    *, *:before, *:after {
+      box-sizing: inherit;
+    }
+
     body {
-	font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
-	text-align: center;
-	padding: 2.5rem;
-
-	background-image: url("../static/lillies.png");
-	background-repeat:no-repeat;
-	margin: 0;
-	overflow: hidden;
-	height: 100vh;
-	background-position: center;
-	background-size: cover;
-	background-attachment: fixed;
-    }
-
-
-    body::after {
-  	 content: "";
- 	 position: absolute;
- 	 inset: 0;
-  	 background-color: rgba(19, 11, 17, 0.4);
- 	 z-index: -3;
-     }
-
-
-    .square {
-	position: absolute;
-	top: 50%;
-	left: 50%;
-        transform: translate(-50%, -50%);
-
-	/*
-	height: min(60vh, 500px);
-	width: min(60vw,600px);
-*/
-	height: 31rem;
-	width: 37rem;
- 	z-index: 1;
-	border-radius: 15px;
-	background-color: #FFF1F5;
-	filter: drop-shadow(0 0 0.55rem #CAB0B8);
-	box-sizing: border-box;
-
-	justify-content: center;
-	text-align: center;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 1.25rem;
- 	padding: 2rem 1rem;
-    }
-
-
-    .square form input[type="text"],
-    .square form input[type="password"],
-    .square form input[type="submit"] {
-  	width: 28rem;
-  	padding: 1rem 1.5rem;
-  	font-size: 1rem;
-  	box-sizing: border-box;
-  	border: 2px solid #FEFBFC;
-	background-color: #FEFBFC;
+      margin: 0;
+      min-height: 100vh;
       font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      text-align: center;
+      background: url("../static/lillies.png") center / cover no-repeat fixed;
+      position: relative;
+      color: #300F18;
+      overflow-y: auto; /* allow scroll if needed on small screens */
     }
 
-    .square form input[type="submit"] {
-  	background-color: #FDBFC9;
-  	border-color: #FDBFC9;
-  	font-weight: bold;
-  	color: white;
-  	font-size: 1.2rem;
-	cursor: pointer;
-	transition: background-color 0.4s ease, border-color 0.4s ease;
+    /* Overlay */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-color: rgba(19, 11, 17, 0.4);
+      z-index: 0;
+      pointer-events: none;
     }
 
-    input::placeholder {
-	font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    /* Center container */
+    .square {
+      position: relative;
+      margin: 5vh auto;
+      width: 90%;
+      max-width: 37rem;
+      background-color: #FFF1F5;
+      border-radius: 15px;
+      padding: 4rem 2rem;
+      filter: drop-shadow(0 0 0.55rem #CAB0B8);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+      z-index: 1;
     }
 
-    
+    .square h1 {
+      margin: 0 0 2rem 0;
+      font-size: 1.875rem;
+      font-weight: 700;
+    }
+
+    form {
+      width: 100%;
+      max-width: 32rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      margin: 0 auto;
+    }
+
+    form input[type="text"],
+    form input[type="password"] {
+      width: 100%;
+      padding: 1rem 1.5rem;
+      font-size: 1rem;
+      border: 2px solid #FEFBFC;
+      background-color: #FEFBFC;
+      border-radius: 6px;
+      font-family: inherit;
+      transition: border-color 0.3s ease;
+    }
+    form input[type="text"]::placeholder,
+    form input[type="password"]::placeholder {
+      font-family: inherit;
+      color: #999;
+    }
+    form input[type="text"]:focus,
+    form input[type="password"]:focus {
+      outline: none;
+      border-color: #FDBFC9;
+      box-shadow: 0 0 6px rgba(253, 191, 201, 0.7);
+      background-color: #fff;
+    }
+
+    form input[type="submit"] {
+      background-color: #FDBFC9;
+      border: 2px solid #FDBFC9;
+      color: white;
+      font-weight: 700;
+      font-size: 1.2rem;
+      cursor: pointer;
+      border-radius: 6px;
+      padding: 1rem 1.5rem;
+      transition: background-color 0.4s ease, border-color 0.4s ease;
+    }
+    form input[type="submit"]:hover,
+    form input[type="submit"]:focus {
+      background-color: #e69ca9;
+      border-color: #e69ca9;
+      outline: none;
+    }
+
     ul.flashes {
-	color: red;
-	list-style: none;
-	padding: 0;
-	margin-top: 3rem;
-	font-weight: bold;
+      color: red;
+      list-style: none;
+      padding: 0;
+      margin-top: 2rem;
+      font-weight: 700;
     }
 
     #bottom-logo {
-	position: fixed;
-	bottom: 0.625rem;
-	left: 0.625rem;
-	width: 15rem;
-	opacity: 0.9;
+      position: fixed;
+      bottom: 10px;
+      left: 10px;
+      width: 250px;
+      opacity: 0.9;
+      max-width: 40vw;
+      height: auto;
+      z-index: 2;
+      transition: width 0.3s ease;
     }
-    </style>
 
+    /* Responsive tweaks */
+    @media (max-width: 768px) {
+      .square {
+        padding: 3rem 1.5rem;
+        width: 95%;
+      }
+      form {
+        max-width: 100%;
+      }
+      #bottom-logo {
+        width: 180px;
+        max-width: 35vw;
+      }
+    }
+
+    @media (max-width: 480px) {
+      html {
+        font-size: 14px;
+      }
+      .square {
+        padding: 2rem 1rem;
+      }
+      .square h1 {
+        font-size: 1.5rem;
+      }
+      #bottom-logo {
+        width: 140px;
+        max-width: 30vw;
+      }
+    }
+  </style>
 </head>
 <body>
-    <div class="bg"></div>
-    <div class="square">
-    	<h1 style="margin-bottom: 2.5rem;margin-top: 0rem;font-size:1.875rem; color: #300F18">
-	    Join an Existing Session
-	</h1>
-
-	<form method="POST" action="{{ url_for('join_session') }}">
-
-            <input type="text" name="session_id" placeholder="Session ID" required style="margin-bottom: 15px;"><br>
-            <input type="password" name="password" placeholder="Session Password" required style="margin-bottom: 20px;"><br>
-            <input type="submit" value="Login">
-
-
-        <!-- invalid message -->
-        {% with messages = get_flashed_messages() %}
-            {% if messages %}
-                <ul class="flashes">
-                    {% for message in messages %}
-                        <li>{{ message }}</li>
-                    {% endfor %}
-                </ul>
-            {% endif %}
-        {% endwith %}
+  <div class="square" role="main">
+    <h1>Join an Existing Session</h1>
+    <form method="POST" action="{{ url_for('join_session') }}" novalidate>
+      <input type="text" name="session_id" placeholder="Session ID" required autocomplete="off" />
+      <input type="password" name="password" placeholder="Session Password" required autocomplete="off" />
+      <input type="submit" value="Login" />
+      {% with messages = get_flashed_messages() %}
+      {% if messages %}
+      <ul class="flashes" role="alert" aria-live="assertive">
+        {% for message in messages %}
+        <li>{{ message }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      {% endwith %}
     </form>
-    </div>
-<!-- logo at the bottom of the screen -->
-    <img src="{{ url_for('static', filename='light_logo.png') }}" id="bottom-logo">
-    <style>
-        #bottom-logo {
-            position: fixed;
-            bottom: 10px;
-            left: 10px;
-            width: 250px;
-            opacity: 0.9;
-        }
-</style></body>
+  </div>
+  <img src="{{ url_for('static', filename='light_logo.png') }}" id="bottom-logo" alt="Logo" />
+</body>
 </html>

@@ -448,7 +448,7 @@ def process_badge_id(image, model, file_name):
             probs = F.softmax(output, dim=1)[0].cpu().numpy()
             pred = np.argmax(probs)
             confidence = probs[pred]
-        if confidence < 0.7:
+        if confidence > 0.7:
             digit_string += "?"
             low_confidence = True
         else:
@@ -566,7 +566,7 @@ def extract_digits(cell_img, file_name):
 
             print(f"Segment {i} predicted digit: {pred_class}")
             print(f"Segment {i} confidences: " + ", ".join(f"{d}:{p:.2f}" for d, p in enumerate(probabilities)))
-            if confidence < 0.70:
+            if confidence < 0.5:
                 digits.append('?')
                 good_vote = False
             else:
@@ -658,12 +658,12 @@ def process_image(image_bytes, file_name, session_id: str):
     validity = True
 
     if key == "" and (badge_id_exists(session_id, badge_id) and not readable_badge_id_exists(session_id, badge_id)):
-        insert_badge(session_id, badge_id, 'readable', key, validity)
+        insert_badge(session_id, badge_id, 'readable', key, file_name, validity)
     elif key == "" and ((not badge_id_exists(session_id, badge_id)) or readable_badge_id_exists(session_id, badge_id)):
         validity = False
-        insert_badge(session_id, badge_id, 'readable', key, validity)
+        insert_badge(session_id, badge_id, 'readable', key, file_name, validity)
     else:
-        insert_badge(session_id, badge_id, 'unreadable', key, validity)
+        insert_badge(session_id, badge_id, 'unreadable', key, file_name, validity)
 
     print(f"Extracted Badge ID: {badge_id}")
 

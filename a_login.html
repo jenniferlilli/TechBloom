@@ -1,70 +1,77 @@
 <!DOCTYPE html>
 <html>
 <head>
-<link href='https://fonts.googleapis.com/css?family=Segoe UI' rel='stylesheet'>
+    <meta charset="UTF-8">
     <title>Login - Create or Join Session</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href='https://fonts.googleapis.com/css?family=Segoe UI' rel='stylesheet'>
     <style>
-    body {
-	font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
-	text-align: center;
-	padding: 40px;
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            background-image: url("../static/lillies.png");
+            background-repeat: no-repeat;
+            background-position: center;
+            background-size: cover;
+            background-attachment: fixed;
+            overflow: hidden;
+        }
 
-	background-image: url("../static/lillies.png");
-	background-repeat:no-repeat;
-	margin: 0;
-	overflow: hidden;
-	height: 100vh;
-	background-position: center;
-	background-size: cover;
-	background-attachment: fixed;
-    }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 5vh 2vw;
+            box-sizing: border-box;
+            flex-direction: column;
+        }
 
-    .button-group {
-    	display: flex;
-    	flex-direction: column;
-    	align-items: center;
-    	gap: 10px;
-    }
+        h1 {
+            font-size: 3rem;
+            color: #300F18;
+            margin-bottom: 0.5rem;
+        }
 
-    input[type=submit] {
-	background-color: #F5AEB9;
-	padding: 16px 24px;
-	width: 275px;
-	height: 65px;
-	border: 2px solid #F5AEB9;
-	font-size: 18px;
-	font-weight: bold;
-	color: white;
-	cursor: pointer;
-	transition: background-color 0.4s ease, border-color 0.4s ease;
-    }
-    input[type="submit"]:hover {
-    	background-color: #E28C9A;
-    	border-color: #E28C9A; 
-    }
+        p {
+            margin-top: 0.5rem;
+            margin-bottom: 2rem;
+            font-size: 1rem;
+            color: #61162C;
+        }
+
+        .button-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input[type="submit"] {
+            background-color: #F5AEB9;
+            padding: 16px 24px;
+            width: 275px;
+            height: 65px;
+            border: 2px solid #F5AEB9;
+            font-size: 18px;
+            font-weight: bold;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.4s ease, border-color 0.4s ease;
+        }
+
+        input[type="submit"]:hover {
+            background-color: #E28C9A;
+            border-color: #E28C9A;
+        }
 
         ul {
             color: red;
             list-style: none;
         }
-    </style>
-</head>
-<body>
-    <h1 style="margin-top: 250px;margin-bottom: 10px; font-size: 50px; color: #300F18; text-align: center;">ICAST Showcase Results</h1>
-    <p style = "margin-top: 16px; margin-bottom: 28px; color: #61162C; font-size: 16px; text-align: center"> Create a new session or join an existing session to begin. </p>
 
-
-    <div class="button-group">
-	<form action="{{ url_for('create_session') }}" method="get">
-            <input type="submit" value="Create New Session" style="margin-bottom: 7px; align-items: center"></button>
-	</form>
-	<form action="{{ url_for('join_session') }}">
-            <input type="submit" value="Join Existing Session" style=align-items: center></button>	
-	</form>
-    </div>
-<!-- logo at the bottom of the screen -->
-    <img src="{{ url_for('static', filename='home_logo.png') }}" id="bottom-logo">
-    <style>
         #bottom-logo {
             position: fixed;
             bottom: 10px;
@@ -72,7 +79,40 @@
             width: 250px;
             opacity: 0.9;
         }
+
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 2.2rem;
+            }
+
+            p {
+                font-size: 0.95rem;
+            }
+
+            input[type="submit"] {
+                font-size: 1rem;
+                height: 55px;
+                width: 85vw;
+                max-width: 275px;
+            }
+        }
     </style>
+</head>
+<body>
+
+    <h1>ICAST Showcase Results</h1>
+    <p>Create a new session or join an existing session to begin.</p>
+
+    <div class="button-group">
+        <form action="{{ url_for('create_session') }}" method="get">
+            <input type="submit" value="Create New Session">
+        </form>
+        <form action="{{ url_for('join_session') }}">
+            <input type="submit" value="Join Existing Session">
+        </form>
+    </div>
+
+    <img src="{{ url_for('static', filename='home_logo.png') }}" id="bottom-logo">
 
 </body>
 </html>
