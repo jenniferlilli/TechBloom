@@ -265,7 +265,7 @@ def review_dashboard():
             )
         badges_data.append({
             'name': ballot.name,
-            'ballot_id' : ballot.id,
+            'id' : ballot.id,
             'badge_id': ballot.badge_id,
             's3_url': s3_url,
         })
@@ -339,11 +339,12 @@ def fix_vote():
 @app.route('/fix_badge', methods=['POST'])
 def fix_badge():
     session_id = session.get('session_id')
-    ballot_id = request.form['ballot_id']
+    id = request.form['id']
+    print(id)
     new_badge = request.form['badge_id'].strip()
 
     db_session = get_db_session()
-    ballot = db_session.query(Ballot).get(ballot_id)
+    ballot = db_session.query(Ballot).get(id)
     if not ballot:
         flash('Ballot not found.')
         db_session.close()
@@ -365,15 +366,24 @@ def fix_badge():
         return redirect(request.referrer)
 
     ballot.badge_id = new_badge
-    ballot.badge_status = 'readable'
+    print(f"Before update: badge_status = {ballot.badge_status}")
+    ballot.badge_status = 'readable'  # or the correct new status
+    print(f"After update: badge_status = {ballot.badge_status}")
     ballot.validity = is_valid
     ballot.s3_key = ""
-    db_session.commit()
+    try:
+        db_session.commit()
+    except Exception as e:
+        db_session.rollback()
+        print(f"DB commit failed: {e}")
+        flash('Failed to update badge. Please try again.')
+        db_session.close()
+        return redirect(request.referrer)
 
-    votes = db_session.query(BallotVotes).filter(BallotVotes.ballot_id == ballot_id).all()
+    votes = db_session.query(BallotVotes).filter(BallotVotes.ballot_id == id).all()
     for vote in votes:
         vote.badge_id = new_badge
-        vote.validity = is_valid
+        vote.is_valid = is_valid
     db_session.commit()
 
     if old_s3_key:
@@ -407,13 +417,13 @@ def delete_vote(vote_id):
     db_session.close()
     return redirect(request.referrer or url_for('review_dashboard'))
 
-@app.route('/delete_ballot/<int:ballot_id>')
-def delete_ballot(ballot_id):
+@app.route('/delete_ballot/<int:id>')
+def delete_ballot(id):
     db_session = get_db_session()
-    ballot = db_session.query(Ballot).get(ballot_id)
+    ballot = db_session.query(Ballot).get(id)
 
     if ballot:
-        ballot_id = ballot.id
+        id = ballot.id
         badge_id = ballot.badge_id
         session_id = ballot.session_id
 
@@ -435,7 +445,7 @@ def delete_ballot(ballot_id):
             db_session.delete(ocr_result)
 
         # Delete all BallotVotes with matching badge_id
-        votes = db_session.query(BallotVotes).filter_by(ballot_id=ballot_id).all()
+        votes = db_session.query(BallotVotes).filter_by(ballot_id=id).all()
         for vote in votes:
             if vote.key:
                 try:

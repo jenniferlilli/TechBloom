@@ -126,12 +126,12 @@
             <td style="white-space: nowrap;">
               <!-- Fix Badge -->
               <form action="{{ url_for('fix_badge') }}" method="POST" style="display:inline-block; margin-right: 20px;">
-                <input type="hidden" name="ballot_id" value="{{ badge.ballot_id }}">
+                <input type="hidden" name="id" value="{{ badge.id }}">
                 <input type="text" name="badge_id" placeholder="Enter badge ID" required>
                 <button type="submit" class="btn btn-reprocess">Fix</button>
               </form>
               <!-- Delete Ballot -->
-              <form action="{{ url_for('delete_ballot', ballot_id=badge.ballot_id) }}" method="GET" style="display:inline-block;">
+              <form action="{{ url_for('delete_ballot', id=badge.id) }}" method="GET" style="display:inline-block;">
                 <button type="submit" class="btn btn-delete">Delete</button>
               </form>
             </td>
