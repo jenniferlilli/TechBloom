@@ -371,8 +371,11 @@
     <button type="submit" onclick="uploadFiles()">Submit Files</button>
 
     {% if joined_existing %}
-    <button style="margin-top: 16px; background-color: #888; border: none; border-radius: 8px; color: white; font-size: 14px; padding: 10px 20px; cursor: pointer;" onclick="skipUpload()">Skip Upload (Use existing files)</button>
-    {% endif %}
+<button
+  style="background-color: #888; border: none; border-radius: 8px; color: white; font-size: 14px; padding: 14px 20px; max-width: 30rem; cursor: pointer; display: block; margin-left: auto; margin-right: auto;" 
+  onclick="skipUpload()">
+  Skip Upload (Use existing files)
+</button>    {% endif %}
   </div>
 
   <img src="{{ url_for('static', filename='light_logo.png') }}" id="bottom-logo" alt="Logo" />
