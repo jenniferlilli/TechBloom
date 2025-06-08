@@ -4,6 +4,7 @@ import boto3
 import json
 import re
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+from flask_cors import CORS
 from sqlalchemy import func, desc
 from werkzeug.utils import secure_filename
 from db_model import (
@@ -25,6 +26,7 @@ s3 = boto3.client('s3')
 bucket_name = 'techbloom-ballots'
 
 app = Flask(__name__, template_folder='.')
+CORS(app)
 app.secret_key = 'secret-key'
 
 ALLOWED_BADGE_EXTENSIONS = {'csv', 'txt'}
@@ -464,6 +466,7 @@ def delete_ballot(id):
 
     db_session.close()
     return redirect(request.referrer or url_for('review_dashboard'))
+
 @app.route('/')
 def home():
     return redirect(url_for('login'))
