@@ -464,6 +464,10 @@ def delete_ballot(id):
 
     db_session.close()
     return redirect(request.referrer or url_for('review_dashboard'))
+@app.route('/')
+def home():
+    return redirect(url_for('login'))
+
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000)) 
