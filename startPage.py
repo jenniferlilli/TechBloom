@@ -371,7 +371,7 @@ def fix_vote():
 @app.route('/fix_badge', methods=['POST'])
 def fix_badge():
     session_id = session.get('session_id')
-    id = request.form['id']
+    id = int(request.form['id'])
     print(id)
     new_badge = request.form['badge_id'].strip()
 
@@ -404,6 +404,11 @@ def fix_badge():
     ballot.validity = is_valid
     ballot.s3_key = ""
     try:
+        ballot = db_session.query(Ballot).filter_by(id=id).one()
+        ballot.badge_status = 'readable'
+        ballot.badge_id = new_badge
+        ballot.validity = is_valid
+        ballot.s3_key = ""
         db_session.commit()
     except Exception as e:
         db_session.rollback()
@@ -459,14 +464,12 @@ def delete_ballot(id):
         badge_id = ballot.badge_id
         session_id = ballot.session_id
 
-        # Delete ballot image from S3
         if ballot.s3_key:
             try:
                 s3.delete_object(Bucket=bucket_name, Key=ballot.s3_key)
             except Exception as e:
                 print(f"Error deleting ballot S3 image: {e}")
 
-        # Delete OCRResult S3 image and DB row
         ocr_result = db_session.query(OCRResult).filter_by(session_id=session_id, filename=ballot.name).first()
         if ocr_result:
             if ocr_result.filename:
@@ -476,7 +479,6 @@ def delete_ballot(id):
                     print(f"Error deleting OCR S3 image: {e}")
             db_session.delete(ocr_result)
 
-        # Delete all BallotVotes with matching badge_id
         votes = db_session.query(BallotVotes).filter_by(ballot_id=id).all()
         for vote in votes:
             if vote.key:
@@ -486,7 +488,6 @@ def delete_ballot(id):
                     print(f"Error deleting vote image {vote.key} from S3: {e}")
             db_session.delete(vote)
 
-        # Delete all Ballots with same badge_id
         db_session.delete(ballot)
 
         db_session.commit()
