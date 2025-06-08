@@ -19,7 +19,7 @@
       text-align: center;
       padding: 2.5rem;
 
-      background: url("../static/lillies.png") center/cover fixed no-repeat;
+      background: url("{{ url_for('static', filename='lillies.png') }}") center / cover fixed no-repeat;
       margin: 0;
       overflow: hidden;
       height: 100vh;
