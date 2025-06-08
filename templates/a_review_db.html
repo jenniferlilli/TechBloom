@@ -13,30 +13,25 @@
 	overflow-y: auto;
     }
     body {
-	font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
-	text-align: center;
-	padding: 2.5rem;
-
-	background-image: url("static/lillies.png");
-	background-repeat:no-repeat;
-	margin: 0;
-	overflow: visible;
-	min-height: 100vh;
-	height: auto;
-	background-position: center;
-	background-size: cover;
-	background-attachment: fixed;
+      font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      background-image: url('{{ url_for('static', filename='lillies.png') }}');
+      background-position: center;
+      background-attachment: fixed;
+      background-size: cover;
+      background-repeat: no-repeat;
+      color: #300F18;
+      position: relative;
     }
 
-
     body::after {
-  	 content: "";
- 	 position: absolute;
- 	 inset: 0;
-  	 background-color: rgba(19, 11, 17, 0.4);
- 	 z-index: -3;
-     }
-
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-color: rgba(19, 11, 17, 0.4);
+      z-index: -1;
+    }
 
     .square {
       position: relative;
@@ -138,22 +133,14 @@
       max-width: 150px;
       display: block;
     }
-#fixed-logo{
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  width: 250px;
-  max-width: 100%;
-  z-index: 1000;
-  padding: 0.5rem 1rem;
-  background: transparent;
-}
 
-#bottom-logo {
-  width: 100%;
-  opacity: 0.9;
-  display: block;
-}
+    #bottom-logo {
+      display: block;
+      width: 250px;
+      opacity: 0.9;
+      margin: 4rem auto 0 auto;
+      z-index: 1;
+    }
 
   </style>
 </head>
@@ -298,13 +285,7 @@
   }, 3000);  // 3000ms = 3 seconds
 </script>
 </div>
-<div id="fixed-logo">
-  <img 
-    src="{{ url_for('static', filename='light_logo.png') }}" 
-    id="bottom-logo" 
-    alt="Light Logo"
-  />
-</div>
+    <img src="{{ url_for('static', filename='light_logo.png') }}" id="bottom-logo" alt="Light Logo" />
 
 </body>
 </html>
