@@ -1,7 +1,13 @@
 services:
   - type: web
-    name: flask-backend
+    name: techbloom
     env: python
-    plan: free
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python startPage.py"
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn startPage:app
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: AWS_ACCESS_KEY_ID
+        value: AKIAX5YQT6QPFF4PLVQB
+      - key: AWS_SECRET_ACCESS_KEY
+        value: 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

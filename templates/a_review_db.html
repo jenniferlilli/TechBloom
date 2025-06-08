@@ -4,8 +4,13 @@
 <link href='https://fonts.googleapis.com/css?family=Segoe UI' rel='stylesheet'>
   <title>Review Dashboard</title>
   <style>
-    html{
-	font-size: 16 px;
+    html, body{
+	font-size: 16px;
+	height: 100%;
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+	overflow-y: auto;
     }
     body {
 	font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -15,8 +20,9 @@
 	background-image: url("static/lillies.png");
 	background-repeat:no-repeat;
 	margin: 0;
-	overflow: hidden;
-	height: 100vh;
+	overflow: visible;
+	min-height: 100vh;
+	height: auto;
 	background-position: center;
 	background-size: cover;
 	background-attachment: fixed;
@@ -32,38 +38,70 @@
      }
 
 
-.square {
-  position: relative;
-  margin: 0 auto;
-  border-radius: 15px;
-  background-color: #FFF1F5;
-  filter: drop-shadow(0 0 0.55rem #CAB0B8);
-  box-sizing: border-box;
-  padding: 2rem 1.5rem;
-  max-width: 100rem;
-  width: 90%;
+    .square {
+      position: relative;
+      margin: 0 auto;
+      border-radius: 15px;
+      background-color: #FFF1F5;
+      filter: drop-shadow(0 0 0.55rem #CAB0B8);
+      box-sizing: border-box;
+      padding: 2rem 1.5rem;
+      max-width: 100rem;
+      width: 90%;
 }
-    h2 {
+
+
+    .button-row {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .button-row button {
+      background-color: #EAA5B0;
+      color: white;
+      border: none;
+      padding: 1rem 1.5rem;
+      font-size: 1rem;
+      border-radius: 12px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      max-width: 250px;
+      flex: 1 1 200px;
+    }
+
+    .button-row button:hover {
+      background-color: white;
+      color: #EAA5B0;
+    }
+
+    h1 {
       text-align: center;
-      margin-bottom: 20px;
+      margin-bottom: 2rem;
+      color: #300F18;
+	font-size: 2.4rem;
     }
     .section {
       margin-bottom: 40px;
     }
     .section h3 {
       margin-bottom: 10px;
-      border-bottom: 1px solid #ccc;
+      border-bottom: 1px solid #69424D;
       padding-bottom: 5px;
-      color: #333;
+      color: #300F18;
     }
     table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 10px;
+      background-color: white;
     }
     th, td {
       padding: 8px 12px;
-      border: 1px solid #ddd;
+      border: 1px solid #69424D;
       text-align: left;
     }
     tr:hover {
@@ -100,6 +138,23 @@
       max-width: 150px;
       display: block;
     }
+#fixed-logo{
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 250px;
+  max-width: 100%;
+  z-index: 1000;
+  padding: 0.5rem 1rem;
+  background: transparent;
+}
+
+#bottom-logo {
+  width: 100%;
+  opacity: 0.9;
+  display: block;
+}
+
   </style>
 </head>
 <body>
@@ -128,7 +183,10 @@
 
 <div class="square">
 
-  <h2>Review Dashboard</h2>
+  <h1>Review Dashboard</h2>
+    <div class="button-row">
+      <button onclick="location.href='{{ url_for('upload_files') }}'">Go to Upload Files</button>
+    </div>
 
   <!-- Section 1: Ballots with Unreadable Badge IDs -->
   <div class="section">
@@ -169,7 +227,7 @@
                 <button type="submit" class="btn btn-reprocess">Fix</button>
               </form>
               <!-- Delete Ballot -->
-              <form action="{{ url_for('delete_ballot', id=badge.id) }}" method="GET" style="display:inline-block;">
+              <form action="{{ url_for('delete_ballot', id=badge.id) }}" method="GET" style="display:inline-block; margin-left: 0.5rem;">
                 <button type="submit" class="btn btn-delete">Delete</button>
               </form>
             </td>
@@ -219,7 +277,7 @@
                 <button type="submit" class="btn btn-reprocess">Fix</button>
               </form>
               <!-- Delete Vote -->
-              <form action="{{ url_for('delete_vote', vote_id=vote.vote_id) }}" method="GET" style="display:inline-block;">
+              <form action="{{ url_for('delete_vote', vote_id=vote.vote_id) }}" method="GET" style="display:inline-block; margin-left: 0.5rem;">
                 <button type="submit" class="btn btn-delete">Delete</button>
               </form>
             </td>
@@ -240,5 +298,13 @@
   }, 3000);  // 3000ms = 3 seconds
 </script>
 </div>
+<div id="fixed-logo">
+  <img 
+    src="{{ url_for('static', filename='light_logo.png') }}" 
+    id="bottom-logo" 
+    alt="Light Logo"
+  />
+</div>
+
 </body>
 </html>

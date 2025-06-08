@@ -14,6 +14,7 @@ from PIL import Image
 from db_utils import insert_vote, insert_badge
 from db_model import get_db_session, ValidBadgeIDs, Ballot
 
+
 model = timm.create_model("resnet18", pretrained=False, num_classes=10)
 model.conv1 = torch.nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
 model.load_state_dict(
@@ -448,7 +449,7 @@ def process_badge_id(image, model, file_name):
             probs = F.softmax(output, dim=1)[0].cpu().numpy()
             pred = np.argmax(probs)
             confidence = probs[pred]
-        if confidence > 0.7:
+        if confidence < 0.7:
             digit_string += "?"
             low_confidence = True
         else:
