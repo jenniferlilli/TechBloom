@@ -15,20 +15,20 @@
     }
 
     body {
-	font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
-	text-align: center;
-	padding: 2.5rem;
+      font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      text-align: center;
+      padding: 2.5rem;
 
-	background-image: url("static/lillies.png");
-	background-repeat:no-repeat;
-	margin: 0;
-	overflow: hidden;
-	height: 100vh;
-	background-position: center;
-	background-size: cover;
-	background-attachment: fixed;
-        position: relative;
-        z-index: 0;  
+      background-image: url("static/lillies.png");
+      background-repeat: no-repeat;
+      margin: 0;
+      overflow: hidden;
+      height: 100vh;
+      background-position: center;
+      background-size: cover;
+      background-attachment: fixed;
+      position: relative;
+      z-index: 0;
     }
 
     body::before {
@@ -40,11 +40,22 @@
       pointer-events: none;
     }
 
+    /* Fade-in from bottom animation */
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translate(-50%, -40%);
+      }
+      to {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+      }
+    }
+
     .square {
       position: absolute;
       top: 50%;
       left: 50%;
-      transform: translate(-50%, -50%);
       width: 37rem;
       height: 31rem;
       background-color: #FFF1F5;
@@ -55,6 +66,13 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
+
+      animation: fadeInUp 0.5s ease forwards;
+      opacity: 0;
+    }
+
+    .square {
+      opacity: 1;
     }
 
     .square h1 {
@@ -79,6 +97,7 @@
       background-color: #FEFBFC;
       font-family: inherit;
       transition: border-color 0.3s ease;
+      border-radius: 10px;
     }
 
     form input[type="text"]::placeholder,
@@ -104,6 +123,7 @@
       padding: 1rem 1.5rem;
       transition: background-color 0.4s ease, border-color 0.4s ease;
       width: 28rem;
+      border-radius: 15px;
     }
 
     form input[type="submit"]:hover,
@@ -111,14 +131,6 @@
       background-color: #e69ca9;
       border-color: #e69ca9;
       outline: none;
-    }
-
-    ul.flashes {
-      color: red;
-      list-style: none;
-      padding: 0;
-      margin-top: 1rem;
-      font-weight: 700;
     }
 
     #bottom-logo {
@@ -131,7 +143,46 @@
       z-index: 2;
     }
 
-    /* --- Responsive Tweaks --- */
+    /* Flash messages container fixed on the right side, vertical stack */
+    #flash-messages {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      width: 320px;
+      z-index: 1050;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      pointer-events: none; /* clicks pass through */
+    }
+
+    /* Individual flash message style */
+    #flash-messages > div {
+      padding: 12px 20px;
+      margin-bottom: 10px;
+      border-radius: 8px;
+      color: white;
+      background-color: #EAA5B0;
+      font-weight: bold;
+      box-shadow: 0 0 12px #EAA5B0;
+      animation: fadeSlideIn 1s ease-out both;
+      pointer-events: auto; /* enable interaction */
+      cursor: default;
+    }
+
+    /* Fade slide in animation */
+    @keyframes fadeSlideIn {
+      from {
+        opacity: 0;
+        transform: translateX(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    /* Responsive tweaks */
     @media (max-width: 768px) {
       .square {
         position: static;
@@ -175,23 +226,26 @@
   </style>
 </head>
 <body>
-  <div class="square" role="main">
+  <!-- Flash messages container -->
+  <div id="flash-messages" aria-live="polite" aria-atomic="true">
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        {% for message in messages %}
+          <div>{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+  </div>
+
+  <div class="square" role="main" aria-label="Join session form">
     <h1>Join an Existing Session</h1>
     <form method="POST" action="{{ url_for('join_session') }}" novalidate>
-      <input type="text" name="session_id" placeholder="Session ID" required autocomplete="off" />
-      <input type="password" name="password" placeholder="Session Password" required autocomplete="off" />
+      <input type="text" name="session_id" placeholder="Session ID" required autocomplete="off" aria-required="true" />
+      <input type="password" name="password" placeholder="Session Password" required autocomplete="off" aria-required="true" />
       <input type="submit" value="Login" />
-      {% with messages = get_flashed_messages() %}
-      {% if messages %}
-      <ul class="flashes" role="alert" aria-live="assertive">
-        {% for message in messages %}
-        <li>{{ message }}</li>
-        {% endfor %}
-      </ul>
-      {% endif %}
-      {% endwith %}
     </form>
   </div>
+
   <img src="{{ url_for('static', filename='light_logo.png') }}" id="bottom-logo" alt="Logo" />
 </body>
 </html>
