@@ -466,5 +466,6 @@ def delete_ballot(id):
     return redirect(request.referrer or url_for('review_dashboard'))
 
 if __name__ == '__main__':
-    print("Starting Flask app…")
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 10000)) 
+    app.run(host='0.0.0.0', port=port)
+
