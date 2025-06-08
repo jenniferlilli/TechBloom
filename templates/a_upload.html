@@ -31,18 +31,15 @@
 
     body {
       font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
-      background-image: url("../static/lillies.png");
-      background-repeat: no-repeat;
-      background-position: center;
-      background-size: cover;
-      background-attachment: fixed;
+      background: url('{{ url_for('static', filename='lillies.png') }}') center/cover fixed no-repeat;
       position: relative;
       color: #3a2d3d;
-      background-color: #fef9fb;
+      background-color: #fef9fb; 
       display: flex;
       justify-content: center;
       align-items: center;
-    }
+  } 
+
 
     .container-wrapper {
       animation: fadeIn 1.2s ease forwards;
