@@ -6,144 +6,154 @@
   <title>Join Session</title>
   <link href="https://fonts.googleapis.com/css?family=Segoe+UI&display=swap" rel="stylesheet" />
   <style>
-    html {
+    html, body {
+      height: 100%;
+      margin: 0;
       font-size: 16px;
-      box-sizing: border-box;
-    }
-    *, *:before, *:after {
-      box-sizing: inherit;
-    }
-
-    body {
       font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
-      text-align: center;
-      padding: 2.5rem;
-
       background-image: url("static/lillies.png");
       background-repeat: no-repeat;
-      margin: 0;
-      overflow: hidden;
-      height: 100vh;
       background-position: center;
       background-size: cover;
       background-attachment: fixed;
+      overflow: hidden;
       position: relative;
-      z-index: 0;
+      text-align: center;
     }
 
-    body::before {
+    body::after {
       content: "";
       position: fixed;
       inset: 0;
       background-color: rgba(19, 11, 17, 0.4);
-      z-index: -3;
+      z-index: -1;
       pointer-events: none;
     }
 
-    /* Fade-in from bottom animation */
+    /* Back arrow styles */
+    .back-arrow {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      width: 60px;
+      height: 40px;
+      background: white;
+      border-radius: 12px;
+      display: flex;
+      justify-content: flex-start;
+      align-items: center;
+      cursor: pointer;
+      box-shadow: 0 0 6px rgba(0, 0, 0, 0.1);
+      transition: background-color 0.3s ease;
+      padding-left: 12px;
+      z-index: 100;
+      user-select: none;
+    }
+
+    .back-arrow:hover {
+      background-color: #ffe6eb;
+    }
+
+    .back-arrow svg {
+      stroke: #fdbfc9;
+      fill: none;
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      width: 28px;
+      height: 28px;
+    }
+
+    /* Fade in from bottom animation keyframes */
     @keyframes fadeInUp {
       from {
         opacity: 0;
-        transform: translate(-50%, -40%);
+        transform: translate(-50%, -50%) translateY(20px);
       }
       to {
         opacity: 1;
-        transform: translate(-50%, -50%);
+        transform: translate(-50%, -50%) translateY(0);
       }
     }
 
     .square {
-      position: absolute;
+      position: fixed;
       top: 50%;
       left: 50%;
-      width: 37rem;
-      height: 31rem;
+      transform: translate(-50%, -50%) translateY(20px);
       background-color: #FFF1F5;
       border-radius: 15px;
-      padding: 4rem 2rem;
-      box-shadow: 0 0 0.55rem #CAB0B8;
+      filter: drop-shadow(0 0 0.55rem #CAB0B8);
+      box-sizing: border-box;
+      width: 37rem;
+      max-width: 90vw;
+      height: 31rem;
+      max-height: 90vh;
+      padding: 2rem 1rem;
       display: flex;
       flex-direction: column;
-      align-items: center;
       justify-content: center;
-
-      animation: fadeInUp 0.5s ease forwards;
+      align-items: center;
+      gap: 1.25rem;
       opacity: 0;
-    }
-
-    .square {
-      opacity: 1;
+      animation: fadeInUp 0.6s ease forwards;
     }
 
     .square h1 {
-      margin-bottom: 2rem;
+      margin: 0 0 1.5rem 0;
       font-size: 1.875rem;
-      font-weight: 700;
+      color: #300F18;
     }
 
-    form {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 1.25rem;
-    }
-
-    form input[type="text"],
-    form input[type="password"] {
+    .square form input[type="text"],
+    .square form input[type="password"],
+    .square form input[type="submit"] {
       width: 28rem;
+      max-width: 90vw;
       padding: 1rem 1.5rem;
       font-size: 1rem;
+      box-sizing: border-box;
       border: 2px solid #FEFBFC;
       background-color: #FEFBFC;
       font-family: inherit;
-      transition: border-color 0.3s ease;
       border-radius: 10px;
+      transition: border-color 0.3s ease;
     }
 
-    form input[type="text"]::placeholder,
-    form input[type="password"]::placeholder {
+    .square form input[type="text"]::placeholder,
+    .square form input[type="password"]::placeholder {
       color: #999;
     }
 
-    form input[type="text"]:focus,
-    form input[type="password"]:focus {
+    .square form input[type="text"]:focus,
+    .square form input[type="password"]:focus {
       outline: none;
       border-color: #FDBFC9;
       box-shadow: 0 0 6px rgba(253, 191, 201, 0.7);
       background-color: #fff;
     }
 
-    form input[type="submit"] {
+    .square form input[type="submit"] {
       background-color: #FDBFC9;
-      border: 2px solid #FDBFC9;
+      border-color: #FDBFC9;
+      font-weight: bold;
       color: white;
-      font-weight: 700;
       font-size: 1.2rem;
       cursor: pointer;
-      padding: 1rem 1.5rem;
       transition: background-color 0.4s ease, border-color 0.4s ease;
-      width: 28rem;
       border-radius: 15px;
     }
 
-    form input[type="submit"]:hover,
-    form input[type="submit"]:focus {
-      background-color: #e69ca9;
-      border-color: #e69ca9;
-      outline: none;
+    .square form input[type="submit"]:hover {
+      background-color: #D8999E;
+      border-color: #D8999E;
     }
 
-    #bottom-logo {
-      position: fixed;
-      bottom: 10px;
-      left: 10px;
-      width: 250px;
-      height: auto;
-      opacity: 0.9;
-      z-index: 2;
+    input::placeholder {
+      font-family: inherit;
     }
 
-    /* Flash messages container fixed on the right side, vertical stack */
+    /* Flash messages container fixed on the right side */
     #flash-messages {
       position: fixed;
       top: 20px;
@@ -153,10 +163,16 @@
       display: flex;
       flex-direction: column;
       align-items: flex-end;
-      pointer-events: none; /* clicks pass through */
+      pointer-events: none;
     }
+    .square form input[type="text"],
+.square form input[type="password"] {
+  margin-bottom: 1.5rem; /* adjust spacing between the fields */
+}
 
-    /* Individual flash message style */
+.square form input[type="submit"] {
+  margin-top: 0.5rem; /* optional: add spacing above submit button */
+}
     #flash-messages > div {
       padding: 12px 20px;
       margin-bottom: 10px;
@@ -166,11 +182,10 @@
       font-weight: bold;
       box-shadow: 0 0 12px #EAA5B0;
       animation: fadeSlideIn 1s ease-out both;
-      pointer-events: auto; /* enable interaction */
+      pointer-events: auto;
       cursor: default;
     }
 
-    /* Fade slide in animation */
     @keyframes fadeSlideIn {
       from {
         opacity: 0;
@@ -182,26 +197,43 @@
       }
     }
 
+    /* Bottom logo style */
+    #bottom-logo {
+      position: fixed;
+      bottom: 10px;
+      left: 10px;
+      width: 250px;
+      opacity: 0.9;
+      z-index: 2;
+      max-width: 35vw;
+      height: auto;
+    }
+
     /* Responsive tweaks */
     @media (max-width: 768px) {
-      .square {
-        position: static;
-        transform: none;
-        margin: 5vh auto;
-        width: 90%;
-        height: auto;
-        padding: 3rem 1.5rem;
+      html {
+        font-size: 15px;
       }
 
-      form input[type="text"],
-      form input[type="password"],
-      form input[type="submit"] {
+      .square {
+        width: 90vw;
+        height: auto;
+        max-height: none;
+        padding: 3rem 2rem;
+      }
+
+      .square h1 {
+        font-size: 1.5rem;
+      }
+
+      .square form input[type="text"],
+      .square form input[type="password"],
+      .square form input[type="submit"] {
         width: 100%;
       }
 
       #bottom-logo {
         width: 180px;
-        max-width: 35vw;
       }
     }
 
@@ -214,18 +246,20 @@
         padding: 2rem 1rem;
       }
 
-      .square h1 {
-        font-size: 1.5rem;
-      }
-
       #bottom-logo {
         width: 140px;
-        max-width: 30vw;
       }
     }
   </style>
 </head>
 <body>
+  <!-- Back arrow -->
+  <div class="back-arrow" onclick="navigateBack()" aria-label="Go back">
+    <svg viewBox="0 0 24 24">
+      <path d="M18 12H6M6 12l6 6M6 12l6-6" />
+    </svg>
+  </div>
+
   <!-- Flash messages container -->
   <div id="flash-messages" aria-live="polite" aria-atomic="true">
     {% with messages = get_flashed_messages() %}
@@ -239,7 +273,7 @@
 
   <div class="square" role="main" aria-label="Join session form">
     <h1>Join an Existing Session</h1>
-    <form method="POST" action="{{ url_for('join_session') }}" novalidate>
+    <form method="POST" action="{{ url_for('join_session') }}" novalidate id="joinForm">
       <input type="text" name="session_id" placeholder="Session ID" required autocomplete="off" aria-required="true" />
       <input type="password" name="password" placeholder="Session Password" required autocomplete="off" aria-required="true" />
       <input type="submit" value="Login" />
@@ -247,5 +281,49 @@
   </div>
 
   <img src="{{ url_for('static', filename='light_logo.png') }}" id="bottom-logo" alt="Logo" />
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      // Form animation setup
+      const form = document.getElementById('joinForm');
+      if (form) {
+        form.addEventListener('submit', function () {
+          localStorage.setItem('shouldAnimate', 'true');
+        });
+      }
+
+      window.navigateBack = function () {
+        if (window.history.length > 1) {
+          window.history.back();
+        } else {
+          window.location.href = "/";
+        }
+      }
+
+      if (localStorage.getItem('shouldAnimate')) {
+        localStorage.removeItem('shouldAnimate');
+        const square = document.querySelector('.square');
+        if (square) {
+          square.style.animation = 'none';
+          void square.offsetWidth;
+          setTimeout(() => {
+            square.style.animation = 'fadeInUp 0.6s ease forwards';
+          }, 50);
+        }
+      }
+
+      setTimeout(() => {
+        const flashMessages = document.getElementById('flash-messages');
+        if (flashMessages) {
+          flashMessages.style.transition = 'opacity 0.5s ease';
+          flashMessages.style.opacity = '0';
+          setTimeout(() => {
+            flashMessages.style.display = 'none';
+          }, 500);
+        }
+      }, 5000);
+    });
+
+  </script>
 </body>
 </html>

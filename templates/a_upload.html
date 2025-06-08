@@ -190,7 +190,16 @@
       word-break: break-word;
     }
 
-    button[type="submit"] {
+    .button-container {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-top: 20px;
+    }
+
+    button[type="submit"],
+    .skip-upload-btn {
       padding: 14px 30px;
       font-size: 18px;
       background-color: #fdbfc9;
@@ -200,14 +209,13 @@
       font-weight: 700;
       border-radius: 6px;
       max-width: 320px;
-      margin: 20px auto 0;
       transition: background-color 0.4s ease, border-color 0.4s ease, color 0.4s ease;
       user-select: none;
-      display: block;
       width: 100%;
     }
 
-    button[type="submit"]:hover:not(:disabled) {
+    button[type="submit"]:hover:not(:disabled),
+    .skip-upload-btn:hover {
       background-color: #d8999e;
       border-color: #d8999e;
     }
@@ -217,6 +225,16 @@
       border-color: #fddde6;
       color: #fff;
       cursor: not-allowed;
+    }
+
+    .skip-upload-btn {
+      background-color: #888;
+      border-color: #888;
+    }
+
+    .skip-upload-btn:hover {
+      background-color: #777;
+      border-color: #777;
     }
 
     #bottom-logo {
@@ -299,7 +317,13 @@
         height: 220px;
       }
 
-      button[type="submit"] {
+      .button-container {
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      button[type="submit"],
+      .skip-upload-btn {
         max-width: 100%;
       }
     }
@@ -318,7 +342,8 @@
         height: 180px;
       }
 
-      button[type="submit"] {
+      button[type="submit"],
+      .skip-upload-btn {
         font-size: 16px;
         padding: 12px 20px;
       }
@@ -333,7 +358,7 @@
 </head>
 
 <body>
-  <div class="back-arrow" onclick="window.history.back()">
+  <div class="back-arrow" onclick="navigateBackWithAnimation()">
     <svg viewBox="0 0 24 24">
       <path d="M18 12H6M6 12l6 6M6 12l6-6" />
     </svg>
@@ -371,18 +396,18 @@
       </div>
     </div>
 
-    <button type="submit" onclick="uploadFiles()">Submit Files</button>
-
-    {% if joined_existing %}
-    <button style="margin-top: 16px; background-color: #888; border: none; border-radius: 8px; color: white; font-size: 14px; padding: 10px 20px; cursor: pointer;" onclick="skipUpload()">Skip Upload (Use existing files)</button>
-    {% endif %}
+    <div class="button-container">
+      <button type="submit" onclick="uploadFiles()">Submit Files</button>
+      {% if joined_existing %}
+      <button class="skip-upload-btn" onclick="skipUpload()">Skip Uploads</button>
+      {% endif %}
+    </div>
   </div>
 
   <img src="{{ url_for('static', filename='light_logo.png') }}" id="bottom-logo" alt="Logo" />
   <div id="session-id-box">Session ID: <span id="session-id-text">{{ session_id }}</span></div>
 
-  <!-- Your script block remains unchanged -->
-<script>
+  <script>
     let badgeFile = null;
     let zipFile = null;
 
@@ -497,6 +522,18 @@
       });
     }
 
+    function navigateBackWithAnimation() {
+      // Set flag for animation
+      localStorage.setItem('shouldAnimate', 'true');
+
+      // Standard back navigation
+      if (window.history.length > 1) {
+        window.history.back();
+      } else {
+        window.location.href = "/";
+      }
+    }
+
     function skipUpload() {
       fetch("{{ url_for('upload_files') }}", {
         method: 'POST',
@@ -527,6 +564,6 @@
       }, 700); // hide after fade-out
     }
   }, 3000); // wait 3 seconds before starting fade-out
-</script>
+  </script>
 </body>
 </html>

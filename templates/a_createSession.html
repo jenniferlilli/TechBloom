@@ -29,6 +29,40 @@
       pointer-events: none;
     }
 
+    /* Back arrow styles */
+    .back-arrow {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      width: 60px;
+      height: 40px;
+      background: white;
+      border-radius: 12px;
+      display: flex;
+      justify-content: flex-start;
+      align-items: center;
+      cursor: pointer;
+      box-shadow: 0 0 6px rgba(0, 0, 0, 0.1);
+      transition: background-color 0.3s ease;
+      padding-left: 12px;
+      z-index: 100;
+      user-select: none;
+    }
+
+    .back-arrow:hover {
+      background-color: #ffe6eb;
+    }
+
+    .back-arrow svg {
+      stroke: #fdbfc9;
+      fill: none;
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      width: 28px;
+      height: 28px;
+    }
+
     /* Fade in from bottom animation keyframes */
     @keyframes fadeInUp {
       from {
@@ -38,6 +72,16 @@
       to {
         opacity: 1;
         transform: translate(-50%, -50%) translateY(0);
+      }
+    }
+
+    /* Flash animation keyframes */
+    @keyframes flash {
+      0%, 100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.3;
       }
     }
 
@@ -68,6 +112,10 @@
 
       opacity: 0;
       animation: fadeInUp 0.6s ease forwards;
+    }
+
+    .square.flash {
+      animation: flash 1.5s ease-in-out infinite;
     }
 
     .square h1 {
@@ -183,14 +231,56 @@
   </style>
 </head>
 <body>
+  <!-- Back arrow -->
+  <div class="back-arrow" onclick="navigateBack()" aria-label="Go back">
+    <svg viewBox="0 0 24 24">
+      <path d="M18 12H6M6 12l6 6M6 12l6-6" />
+    </svg>
+  </div>
+
   <div class="square" role="main" aria-label="Create session form">
     <h1>Create a New Session</h1>
-    <form method="POST" action="{{ url_for('create_session') }}">
+    <form method="POST" action="{{ url_for('create_session') }}" id="sessionForm">
       <input type="password" name="password" placeholder="Enter Password" required autocomplete="off" aria-required="true" /><br><br>
       <input type="submit" value="Create Session" />
     </form>
   </div>
 
   <img src="{{ url_for('static', filename='light_logo.png') }}" id="bottom-logo" alt="Logo" />
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Standard form submission (no AJAX)
+      const form = document.getElementById('sessionForm');
+      if (form) {
+        form.addEventListener('submit', function() {
+          // Set flag for animation when returning
+          localStorage.setItem('shouldAnimate', 'true');
+        });
+      }
+
+      // Back button functionality
+      window.navigateBack = function() {
+        if (window.history.length > 1) {
+          window.history.back();
+        } else {
+          window.location.href = "/";
+        }
+      }
+
+      // Animation replay logic
+      if (localStorage.getItem('shouldAnimate')) {
+        localStorage.removeItem('shouldAnimate');
+        const square = document.querySelector('.square');
+        if (square) {
+          square.style.animation = 'none';
+          void square.offsetWidth;
+          setTimeout(() => {
+            square.style.animation = 'fadeInUp 0.6s ease forwards';
+          }, 50);
+        }
+      }
+    });
+  </script>
 </body>
 </html>

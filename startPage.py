@@ -107,7 +107,7 @@ def create_session():
         db_session.close()
 
         session['session_id'] = session_id
-        flash(f'Generated Session ID: {session_id}')
+        flash(f'Generated Session ID successfully.')
         return redirect(url_for('upload_files'))
 
     return render_template('templates/a_createSession.html')
@@ -126,7 +126,7 @@ def join_session():
         if user_session:
             session['session_id'] = session_id
             session['joined_existing'] = True
-            flash(f'Joined session: {session_id}')
+            flash(f'Joined session successfully.')
             return redirect(url_for('upload_files'))
         else:
             flash('Invalid session ID or password.')
@@ -235,7 +235,7 @@ def upload_files():
         return redirect(url_for('dashboard'))
 
     db_session.close()
-    return render_template('templates/a_upload.html', joined_existing=joined_existing and (existing_badges or existing_zip))
+    return render_template('templates/a_upload.html', joined_existing=joined_existing and (existing_badges or existing_zip), session_id=session_id)
 
 @app.route('/dashboard')
 def dashboard():

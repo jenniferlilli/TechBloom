@@ -49,6 +49,32 @@
       }
     }
 
+    @keyframes fadeSlideIn {
+      0% {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    #flash-message {
+      background-color: #F5AEB9;
+      color: white;
+      font-weight: bold;
+      padding: 1rem 1.5rem;
+      margin: 1rem auto 2rem auto;
+      border: 2px solid #e89aa7;
+      border-radius: 12px;
+      width: fit-content;
+      max-width: 90%;
+      text-align: center;
+      animation: fadeSlideIn 0.8s ease-out both;
+      box-shadow: 0 0 12px rgba(255, 182, 193, 0.5);
+    }
+
     h1 {
       margin-bottom: 3rem;
       margin-top: 2.5rem;
@@ -233,11 +259,20 @@
 </head>
 <body>
   <main>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div id="flash-message">
+          {{ messages[0] }}
+        </div>
+      {% endif %}
+    {% endwith %}
+
     <h1>OCR Dashboard - ICAST Fishing Showcase Winners</h1>
 
     <div class="button-row">
       <button onclick="location.href='{{ url_for('upload_files') }}'">Go to Upload Files</button>
       <button onclick="location.href='{{ url_for('review_dashboard') }}'">Go to Review Dashboard</button>
+      <button onclick="location.href='{{ url_for('login') }}'">Logout</button>
     </div>
 
     <div id="refresh-container">
