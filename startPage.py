@@ -279,11 +279,17 @@ def dashboard():
 
 @app.route('/review')
 def review_dashboard():
+    session_id = session.get("session_id")
+    if not session_id:
+        flash("Please log in or create a session first.")
+        return redirect(url_for("login"))
     db_session = get_db_session()
+    
 
     ballots_with_badge_issues = (
         db_session.query(Ballot)
-        .filter(Ballot.badge_status == 'unreadable')
+        .filter(Ballot.session_id == session_id,
+                Ballot.badge_status == 'unreadable')
         .all()
     )
     badges_data = []
@@ -304,15 +310,17 @@ def review_dashboard():
 
     votes_with_errors = (
         db_session.query(BallotVotes)
-        .join(Ballot, BallotVotes.badge_id == Ballot.badge_id)
+        .join(Ballot, BallotVotes.ballot_id == Ballot.id)
         .filter(
-            Ballot.badge_status == 'readable',
+            Ballot.session_id == session_id,
+            Ballot.badge_status == "readable",
             Ballot.validity == True,
-            BallotVotes.vote_status == 'unreadable',
+            BallotVotes.vote_status == "unreadable",
             BallotVotes.is_valid == True
         )
         .all()
     )
+    
     votes_data = []
     for vote in votes_with_errors:
         s3_url = None
@@ -345,7 +353,15 @@ def fix_vote():
         return redirect(request.referrer or url_for('review_dashboard'))
 
     db_session = get_db_session()
-    vote = db_session.query(BallotVotes).get(vote_id)
+    vote = (
+        db_session.query(BallotVotes)
+        .join(Ballot, BallotVotes.ballot_id == Ballot.id)
+        .filter(
+            BallotVotes.id == vote_id,
+            Ballot.session_id == session_id
+        )
+        .first()
+    )
 
     if vote is None:
         flash('Vote not found.', 'error')
@@ -376,7 +392,11 @@ def fix_badge():
     new_badge = request.form['badge_id'].strip()
 
     db_session = get_db_session()
-    ballot = db_session.query(Ballot).get(id)
+    ballot = (
+        db_session.query(Ballot)
+        .filter(Ballot.id == id, Ballot.session_id == session_id)
+        .first()
+    )
     if not ballot:
         flash('Ballot not found.')
         db_session.close()
@@ -435,8 +455,14 @@ def fix_badge():
 
 @app.route('/delete_vote/<int:vote_id>')
 def delete_vote(vote_id):
+    session_id = session.get('session_id')
     db_session = get_db_session()
-    vote = db_session.query(BallotVotes).get(vote_id)
+    vote = (
+        db_session.query(BallotVotes)
+        .join(Ballot, BallotVotes.ballot_id == Ballot.id)
+        .filter(BallotVotes.id == vote_id, Ballot.session_id == session_id)
+        .first()
+    )
 
     if vote:
         if vote.key:
@@ -456,8 +482,13 @@ def delete_vote(vote_id):
 
 @app.route('/delete_ballot/<int:id>')
 def delete_ballot(id):
+    session_id = session.get('session_id')
     db_session = get_db_session()
-    ballot = db_session.query(Ballot).get(id)
+    ballot = (
+        db_session.query(Ballot)
+        .filter(Ballot.id == id, Ballot.session_id == session_id)
+        .first()
+    )
 
     if ballot:
         id = ballot.id
