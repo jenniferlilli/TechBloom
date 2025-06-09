@@ -11,12 +11,13 @@
       margin: 0;
       font-size: 16px;
       font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
-      background-image: url("static/lillies.png");
-      background-repeat: no-repeat;
-      background-position: center;
-      background-size: cover;
-      background-attachment: fixed;
+      text-align: center;
+      padding: 2.5rem;
+
+      background: url("{{ url_for('static', filename='lillies.png') }}") center / cover fixed no-repeat;
+      margin: 0;
       overflow: hidden;
+      height: 100vh;
       position: relative;
       text-align: center;
     }

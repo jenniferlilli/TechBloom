@@ -31,18 +31,15 @@
 
     body {
       font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
-      background-image: url("../static/lillies.png");
-      background-repeat: no-repeat;
-      background-position: center;
-      background-size: cover;
-      background-attachment: fixed;
+      background: url('{{ url_for('static', filename='lillies.png') }}') center/cover fixed no-repeat;
       position: relative;
       color: #3a2d3d;
-      background-color: #fef9fb;
+      background-color: #fef9fb; 
       display: flex;
       justify-content: center;
       align-items: center;
-    }
+  } 
+
 
     .container-wrapper {
       animation: fadeIn 1.2s ease forwards;
@@ -396,12 +393,14 @@
       </div>
     </div>
 
-    <div class="button-container">
-      <button type="submit" onclick="uploadFiles()">Submit Files</button>
-      {% if joined_existing %}
-      <button class="skip-upload-btn" onclick="skipUpload()">Skip Uploads</button>
-      {% endif %}
-    </div>
+    <button type="submit" onclick="uploadFiles()">Submit Files</button>
+
+    {% if joined_existing %}
+<button
+  style="background-color: #888; border: none; border-radius: 8px; color: white; font-size: 14px; padding: 14px 20px; max-width: 30rem; cursor: pointer; display: block; margin-left: auto; margin-right: auto;" 
+  onclick="skipUpload()">
+  Skip Upload (Use existing files)
+</button>    {% endif %}
   </div>
 
   <img src="{{ url_for('static', filename='light_logo.png') }}" id="bottom-logo" alt="Logo" />
