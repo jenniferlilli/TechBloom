@@ -8,29 +8,13 @@ go to terminal
 
 cd TechBloom folder path
 
-if not installed already:
+install all requirements if prompted
 
-    - pip install python (if not already installed)
+aws configure in the terminal
 
-    - pip install flask
-
-    - pip install sqlalchemy
-    
-    - pip install pillow
-    
-    - pip install pytesseract
-
-    - pip install easyocr
-
-    - pip install awscli
-
-    - install all other packages
-
-after installing awscli, to aws configure in the terminal
-
-access key will be: AKIAX5YQT6QPFF4PLVQB
-secret access key will be: 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
-and configure region as us-east-2
+access key: AKIAX5YQT6QPFF4PLVQB
+secret access key: 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
+region: us-east-2
 
 run it with python startPage.py
 
