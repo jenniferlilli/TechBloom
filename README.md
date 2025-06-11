@@ -10,7 +10,7 @@ A website for ICAST Fishing Showcase voting administrators to enter ballots fill
 
 ### **Open project**
 ```
-*cd TechBloom folder path*
+cd TechBloom folder path
 ```
 ex. cd C:\Users\your-name\Downloads\TechBloom-main
 
