@@ -34,17 +34,16 @@ Region: us-east-2
 python startPage.py
 ```
 
-don't follow terminal link...go to: 
-```
+### **Don't follow the terminal link...go to:**
 [http://localhost:5000/login]
-```
 
-### **Hosted link (slow free trial):** https://techbloom.onrender.com/
+### **Hosted link (slow free trial):** 
+[https://techbloom.onrender.com/]
 
 
 ## **Developer Usage**
 
-### **Aesthetics: **
+### **Aesthetics:**
 **Shades used:** 
 #f1dada
 #d8999e
