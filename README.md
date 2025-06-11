@@ -1,5 +1,7 @@
 # TechBloom
 
+A website for ICAST Fishing Showcase voting administrators to enter ballots filled out by voters. Uses ResNet 18 to convert the handwritten item numbers into data that will produce the winners. Review Dashboard is available to correct processing errors
+
 ## **How to run it on a computer locally without an external program**
 
 ### **Download files as a zip...extract files into a regular folder**
