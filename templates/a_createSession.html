@@ -27,7 +27,6 @@
       pointer-events: none;
     }
 
-    /* Back arrow styles */
     .back-arrow {
       position: fixed;
       top: 20px;
@@ -61,7 +60,6 @@
       height: 28px;
     }
 
-    /* Fade in from bottom animation keyframes */
     @keyframes fadeInUp {
       from {
         opacity: 0;
@@ -72,8 +70,7 @@
         transform: translate(-50%, -50%) translateY(0);
       }
     }
-
-    /* Flash animation keyframes */
+    
     @keyframes flash {
       0%, 100% {
         opacity: 1;
@@ -87,7 +84,6 @@
       position: fixed;
       top: 50%;
       left: 50%;
-      /* combine centering and starting translateY for animation */
       transform: translate(-50%, -50%) translateY(20px);
 
       background-color: #FFF1F5;
@@ -174,7 +170,6 @@
       margin-top: 0;
     }
 
-    /* Bottom logo style */
     #bottom-logo {
       position: fixed;
       bottom: 10px;
@@ -186,7 +181,6 @@
       height: auto;
     }
 
-    /* Responsive tweaks */
     @media (max-width: 768px) {
       html {
         font-size: 15px;
@@ -229,7 +223,6 @@
   </style>
 </head>
 <body>
-  <!-- Back arrow -->
   <div class="back-arrow" onclick="navigateBack()" aria-label="Go back">
     <svg viewBox="0 0 24 24">
       <path d="M18 12H6M6 12l6 6M6 12l6-6" />
@@ -248,16 +241,13 @@
 
   <script>
     document.addEventListener('DOMContentLoaded', function() {
-      // Standard form submission (no AJAX)
       const form = document.getElementById('sessionForm');
       if (form) {
         form.addEventListener('submit', function() {
-          // Set flag for animation when returning
           localStorage.setItem('shouldAnimate', 'true');
         });
       }
 
-      // Back button functionality
       window.navigateBack = function() {
         if (window.history.length > 1) {
           window.history.back();
@@ -266,7 +256,6 @@
         }
       }
 
-      // Animation replay logic
       if (localStorage.getItem('shouldAnimate')) {
         localStorage.removeItem('shouldAnimate');
         const square = document.querySelector('.square');
