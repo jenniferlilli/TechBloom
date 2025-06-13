@@ -458,7 +458,7 @@
         const file = input.files[0];
         if (!fileCheckFn(file)) {
           alert(`Invalid file type.`);
-          input.value = ''; // reset input
+          input.value = '';
           return;
         }
         onFileSelected(file);
@@ -483,9 +483,9 @@
       const submitButton = document.querySelector('button[type="submit"]');
       submitButton.disabled = true;
       submitButton.textContent = 'Uploading...';
-      submitButton.style.backgroundColor = '#fddde6'; // light pink
+      submitButton.style.backgroundColor = '#fddde6';
       submitButton.style.borderColor = '#fddde6';
-      submitButton.style.color = '#ffffff'; // keep white text
+      submitButton.style.color = '#ffffff';
       submitButton.style.cursor = 'not-allowed';
 
       const formData = new FormData();
@@ -502,7 +502,6 @@
           return response.text().then(data => {
             alert('Upload failed. Check server logs or validations.');
             console.log(data);
-            // Optionally re-enable the button here
             submitButton.disabled = false;
             submitButton.textContent = 'Submit Files';
             submitButton.style.backgroundColor = '#FDBFC9';
@@ -524,10 +523,8 @@
     }
 
     function navigateBackWithAnimation() {
-      // Set flag for animation
       localStorage.setItem('shouldAnimate', 'true');
 
-      // Standard back navigation
       if (window.history.length > 1) {
         window.history.back();
       } else {
@@ -538,7 +535,7 @@
     function skipUpload() {
       fetch("{{ url_for('upload_files') }}", {
         method: 'POST',
-        body: new FormData() // empty form
+        body: new FormData()
       }).then(response => {
         if (response.redirected) {
           window.location.href = response.url;
@@ -554,7 +551,6 @@
       });
     }
 
-    // Auto-hide flash messages after 3s
     setTimeout(() => {
       const flashContainer = document.getElementById('flash-messages');
       if (flashContainer) {
@@ -562,9 +558,9 @@
         flashContainer.style.opacity = '0';
         setTimeout(() => {
           flashContainer.style.display = 'none';
-      }, 700); // hide after fade-out
+      }, 700);
     }
-  }, 3000); // wait 3 seconds before starting fade-out
+  }, 3000);
   </script>
 </body>
 </html>
