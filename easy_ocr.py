@@ -209,8 +209,6 @@ def preprocess(image):
     return binary
 
 def split_roi_into_digit_boxes(image, expected_rows=5):
-
-    # Step 1: Enhanced preprocessing
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     blurred = cv2.bilateralFilter(gray, 9, 75, 75)
 
@@ -225,7 +223,6 @@ def split_roi_into_digit_boxes(image, expected_rows=5):
         C=2
     )
 
-    # Step 2: Detect REG box
     contours, _ = cv2.findContours(binary.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     reg_rect = None
     max_area = 0
@@ -244,7 +241,6 @@ def split_roi_into_digit_boxes(image, expected_rows=5):
     x, y, w, h = reg_rect
     roi = image[y:y + h, x:x + w]
 
-    # Step 3: Clean horizontal underline detection
     gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
     enhanced_roi = clahe.apply(gray_roi)
@@ -352,7 +348,7 @@ def split_roi_into_digit_boxes(image, expected_rows=5):
 
                 digit_boxes.append(digit_clean)
 
-    print(f"[✓] Extracted {len(digit_boxes)} digits from REG box.")
+    print(f"Extracted {len(digit_boxes)} digits from REG box.")
     return digit_boxes, roi
 
 
@@ -373,7 +369,7 @@ def upload_badge_to_s3(image, file_name, object_prefix="low_confidence_badge"):
         ExtraArgs={"ContentType": "image/jpeg"}
     )
 
-    print(f"[S3] Uploaded to s3://techbloom-ballots/{key}")
+    print(f"Uploaded to s3://techbloom-ballots/{key}")
     return key
 
 def upload_vote_to_s3(image, file_name, object_prefix="low_confidence_vote"):
@@ -385,10 +381,8 @@ def upload_vote_to_s3(image, file_name, object_prefix="low_confidence_vote"):
 
     base_name = os.path.splitext(file_name)[0]
 
-    # Generate a unique UUID string
     unique_id = str(uuid.uuid4())
 
-    # Construct the key with UUID appended
     key = f"{object_prefix}/{base_name}_{unique_id}.jpg"
 
     s3.upload_fileobj(
