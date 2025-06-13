@@ -23,13 +23,7 @@ pip install -r requirements.txt
 ```
 aws configure
 ```
-When prompted, enter:
-
-Access key: AKIAX5YQT6QPFF4PLVQB
-
-Secret access key: 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
-
-Region: us-east-2
+When prompted, enter info
 
 **Run the program**
 ```
@@ -37,7 +31,7 @@ python startPage.py
 ```
 
 **Don't follow the terminal link...go to:**
-[http://localhost:5000/login/]
+[http://localhost:5000/login]
 
 **Hosted link (slow free trial):** 
 [https://techbloom.onrender.com/]
