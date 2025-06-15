@@ -3,7 +3,8 @@ import uuid
 import boto3
 import json
 import re
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_file
+from uuid import uuid4
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 from flask_cors import CORS
 from sqlalchemy import func, desc
 from werkzeug.utils import secure_filename
@@ -16,9 +17,9 @@ from db_model import (
     BallotVotes,
     SessionLocal,
 )
+from db_utils import validate_user_session, insert_user_session
 from easy_ocr import process_image, badge_id_exists, readable_badge_id_exists
 from io import BytesIO
-from openpyxl import Workbook
 import zipfile
 from botocore.exceptions import NoCredentialsError, ClientError
 from collections import defaultdict, Counter
@@ -71,36 +72,16 @@ def login():
 def logout():
     return render_template('templates/a_login.html')
 
+
 @app.route('/create-session', methods=['GET', 'POST'])
 def create_session():
-    adj = [
-        'snoring', 'dizzy', 'sleepy', 'fluffy', 'angry', 'happy', 'tiny', 'giant',
-        'confused', 'jazzy', 'brave', 'sassy', 'nervous', 'spooky', 'mellow', 'zany',
-        'bubbly', 'weird', 'chunky', 'wiggly', 'blurry', 'silly', 'quirky',
-        'wobbly', 'grumpy', 'loud', 'clumsy', 'chatty', 'eerie', 'chill', 'peppy'
-    ]
-
-    fish = [
-        'salmon', 'tuna', 'cod', 'haddock', 'anchovy', 'trout', 'snapper',
-        'mackerel', 'guppy', 'sardine', 'halibut', 'perch', 'bass', 'catfish',
-        'eel', 'flounder', 'grouper', 'minnow', 'pike', 'stingray', 'marlin', 'carp',
-        'barracuda', 'blowfish', 'clownfish', 'lionfish', 'anglerfish', 'betta'
-    ]
-
-    def generate_funny_session_id():
-        adjective = random.choice(adj)
-        fish_name = random.choice(fish)
-        number = random.randint(0, 99)
-        return f"{adjective}{fish_name}{number:02}"
-
     if request.method == 'POST':
         password = request.form.get('password')
         db_session = get_db_session()
-
-        session_id = generate_funny_session_id()
+        session_id = str(uuid4())
         existing = db_session.query(UserSession).filter_by(session_id=session_id).first()
         while existing:
-            session_id = generate_funny_session_id()
+            session_id = str(uuid4())
             existing = db_session.query(UserSession).filter_by(session_id=session_id).first()
 
         db_session.add(UserSession(session_id=session_id, password=password))
@@ -108,10 +89,11 @@ def create_session():
         db_session.close()
 
         session['session_id'] = session_id
-        flash(f'Generated Session ID successfully.')
+        flash('Generated Session ID successfully.')
         return redirect(url_for('upload_files'))
 
     return render_template('templates/a_createSession.html')
+
 
 
 @app.route('/join-session', methods=['GET', 'POST'])
@@ -134,12 +116,17 @@ def join_session():
             return redirect(request.url)
     return render_template('templates/a_joinSession.html')
 
+
 @app.route('/upload-file', methods=['GET', 'POST'])
 def upload_files():
     session_id = session.get('session_id')
     if not session_id:
         flash('Please log in or create a session first.')
         return redirect(url_for('login'))
+
+ 
+    if not validate_user_session(session_id, "default"):
+        insert_user_session(session_id, "default")
 
     db_session = get_db_session()
     joined_existing = session.get('joined_existing', False)
@@ -237,8 +224,13 @@ def upload_files():
     db_session.close()
     return render_template('templates/a_upload.html', joined_existing=joined_existing and (existing_badges or existing_zip), session_id=session_id)
 
+@app.route('/dashboard')
+def dashboard():
+    session_id = session.get("session_id")
+    if not session_id:
+        flash('Please log in or create a session first.')
+        return redirect(url_for('login'))
 
-def get_top3_votes_by_category(session_id):
     db_session = get_db_session()
 
     vote_records = (
@@ -262,63 +254,14 @@ def get_top3_votes_by_category(session_id):
             category_votes[vote.category_id.upper()].append(cleaned_vote)
 
     top3_per_category = {}
+
     for category, votes in category_votes.items():
         counts = Counter(votes)
-        top3_per_category[category] = counts.most_common(3)
-
+        top_votes = counts.most_common(3)  
+        top3_per_category[category] = top_votes
+    print(top3_per_category)
     db_session.close()
-    return top3_per_category
-
-@app.route('/dashboard')
-def dashboard():
-    session_id = session.get("session_id")
-    if not session_id:
-        flash('Please log in or create a session first.')
-        return redirect(url_for('login'))
-
-    top3_per_category = get_top3_votes_by_category(session_id)
-
     return render_template("templates/a_dashboard.html", top3_per_category=top3_per_category)
-
-@app.route('/export_excel')
-def export_excel():
-    session_id = session.get("session_id")
-    if not session_id:
-        flash('Please log in or create a session first.')
-        return redirect(url_for('login'))
-
-    top3_per_category = get_top3_votes_by_category(session_id)
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Top 3 Results"
-
-    ws.append([
-        "", "Catagory ID Field", "Alpha",
-        "1st Place ID", "1st Votes #",
-        "2nd Place ID", "2nd Votes #",
-        "3rd Place ID", "3rd Votes #"
-    ])
-
-    for category_id, top_votes in top3_per_category.items():
-        row = ["", "", category_id]
-        for i in range(3):
-            if i < len(top_votes):
-                row.extend([top_votes[i][0], top_votes[i][1]])
-            else:
-                row.extend(["", ""])
-        ws.append(row)
-
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
-
-    return send_file(
-        output,
-        download_name="top3_votes.xlsx",
-        as_attachment=True,
-        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    )
 
 @app.route('/review')
 def review_dashboard():
@@ -580,4 +523,3 @@ def home():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))  
     app.run(host="0.0.0.0", port=port, debug=True)
-
