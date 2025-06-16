@@ -1,5 +1,4 @@
 import os
-import uuid
 import boto3
 import json
 import re
@@ -124,9 +123,6 @@ def upload_files():
         flash('Please log in or create a session first.')
         return redirect(url_for('login'))
 
- 
-    if not validate_user_session(session_id, "default"):
-        insert_user_session(session_id, "default")
 
     db_session = get_db_session()
     joined_existing = session.get('joined_existing', False)
