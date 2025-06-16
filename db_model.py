@@ -66,7 +66,6 @@ if not DATABASE_URL:
 
 engine = create_engine(DATABASE_URL)
 
-Base.metadata.drop_all(bind=engine)
 Base.metadata.create_all(engine)
 
 SessionLocal = scoped_session(sessionmaker(bind=engine))
