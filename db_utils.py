@@ -6,10 +6,11 @@ from db_model import (
 )
 
 def insert_user_session(session_id: str, password: str):
-    with SessionLocal() as session:
-        user_session = UserSession(session_id=session_id, password=password)
-        session.add(user_session)
-        session.commit()
+    with SessionLocal() as db_session:
+        new_session = UserSession(session_id=session_id, password=password)
+        db_session.add(new_session)
+        db_session.commit()
+        db_session.close()
 
 def validate_user_session(session_id: str, password: str):
     with SessionLocal() as session:
