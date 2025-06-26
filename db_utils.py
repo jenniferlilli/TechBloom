@@ -63,3 +63,5 @@ def insert_badge(session_id: str, badge_id: str, status: str, key: str, name: st
         session.add(ballot)
         session.commit()
 
+
+
