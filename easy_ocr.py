@@ -209,6 +209,8 @@ def preprocess(image):
     return binary
 
 def split_roi_into_digit_boxes(image, expected_rows=5):
+
+    # Step 1: Enhanced preprocessing
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     blurred = cv2.bilateralFilter(gray, 9, 75, 75)
 
@@ -223,6 +225,7 @@ def split_roi_into_digit_boxes(image, expected_rows=5):
         C=2
     )
 
+    # Step 2: Detect REG box
     contours, _ = cv2.findContours(binary.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     reg_rect = None
     max_area = 0
@@ -241,6 +244,7 @@ def split_roi_into_digit_boxes(image, expected_rows=5):
     x, y, w, h = reg_rect
     roi = image[y:y + h, x:x + w]
 
+    # Step 3: Clean horizontal underline detection
     gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
     enhanced_roi = clahe.apply(gray_roi)
@@ -348,7 +352,7 @@ def split_roi_into_digit_boxes(image, expected_rows=5):
 
                 digit_boxes.append(digit_clean)
 
-    print(f"Extracted {len(digit_boxes)} digits from REG box.")
+    print(f"[✓] Extracted {len(digit_boxes)} digits from REG box.")
     return digit_boxes, roi
 
 
@@ -369,7 +373,7 @@ def upload_badge_to_s3(image, file_name, object_prefix="low_confidence_badge"):
         ExtraArgs={"ContentType": "image/jpeg"}
     )
 
-    print(f"Uploaded to s3://techbloom-ballots/{key}")
+    print(f"[S3] Uploaded to s3://techbloom-ballots/{key}")
     return key
 
 def upload_vote_to_s3(image, file_name, object_prefix="low_confidence_vote"):
@@ -394,7 +398,7 @@ def upload_vote_to_s3(image, file_name, object_prefix="low_confidence_vote"):
 
     print(f"[S3] Uploaded to s3://techbloom-ballots/{key}")
     return key
-
+#---------------------
 def process_badge_id(image, model, file_name):
     transform = transforms.Compose([
         transforms.ToPILImage(),
@@ -406,9 +410,8 @@ def process_badge_id(image, model, file_name):
     roi = image[0:int(h * 0.25), int(w * 0.65):w]
     digit_boxes, extracted_img = split_roi_into_digit_boxes(roi)
 
-    digit_string = ""
-    low_confidence = False
-    for i, digit_img in enumerate(digit_boxes):
+    processed_digits = []
+    for digit_img in digit_boxes:
         if len(digit_img.shape) == 3:
             digit_img = cv2.cvtColor(digit_img, cv2.COLOR_BGR2GRAY)
 
@@ -437,23 +440,31 @@ def process_badge_id(image, model, file_name):
             kernel = np.ones((3, 1), np.uint8)
             processed = cv2.dilate(processed, kernel, iterations=1)
 
-        input_tensor = transform(processed).unsqueeze(0)
-        with torch.no_grad():
-            output = model(input_tensor)
-            probs = F.softmax(output, dim=1)[0].cpu().numpy()
-            pred = np.argmax(probs)
-            confidence = probs[pred]
+        processed_digits.append(processed)
+
+    # chnaged: Batching transforming all digits 
+    input_batch = torch.stack([transform(d) for d in processed_digits])
+    with torch.no_grad():
+        output_batch = model(input_batch)
+        probs_batch = F.softmax(output_batch, dim=1).cpu().numpy()
+
+    digit_string = ""
+    low_confidence = False
+    for probs in probs_batch:
+        pred = np.argmax(probs)
+        confidence = probs[pred]
         if confidence < 0.7:
             digit_string += "?"
             low_confidence = True
         else:
             digit_string += str(pred)
+
     if low_confidence or not len(digit_string) == 5:
         key = upload_badge_to_s3(extracted_img, file_name)
         return digit_string, key
     else:
         return digit_string, ""
-
+#------------------------------------
 def center_digit_proportional(img):
     pts = cv2.findNonZero(img)
     if pts is None:
@@ -530,7 +541,7 @@ def preprocess_cell(cell_img):
     _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     resized = cv2.resize(thresh, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
     return resized
-
+#-------------------------
 def extract_digits(cell_img, file_name):
     h, w = cell_img.shape[:2]
     segment_width = w // 3
@@ -577,16 +588,40 @@ def extract_digits(cell_img, file_name):
     if not good_vote:
         key = upload_vote_to_s3(cell_img, file_name)
     return final, key
-    
+
+#new func i added 
+def split_vote_cell_into_digits(cell_img):
+    gray = cv2.cvtColor(cell_img, cv2.COLOR_BGR2GRAY) if len(cell_img.shape) == 3 else cell_img
+    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+
+    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    digit_boxes = []
+    for cnt in contours:
+        x, y, w, h = cv2.boundingRect(cnt)
+        if h > 10 and w > 3:  # filter noise; adjust as needed
+            digit_boxes.append((x, y, w, h))
+
+    digit_boxes = sorted(digit_boxes, key=lambda b: b[0]) 
+
+    digits = []
+    for (x, y, w, h) in digit_boxes:
+        digit = binary[y:y+h, x:x+w]
+        digits.append(digit)
+
+    return digits, cell_img
+
+#-----------------------  
 def extract_text_from_cells(image, rows, count, file_name):
     extracted = []
     CATEGORY_IDS = [
-    "A", "B", "C", "D", "E", "G", "H", "I", "J", "F",
-    "FA", "FB", "FC", "FD", "FE", "FF", "FG", "FH",
-    "K", "KA", "KB", "KC", "L", "M", "N", "O", "P", "PA",
-    "Q", "QA", "R", "RA", "S", "T", "U", "V", "W",
-    "WA", "X", "Y", "YA"
+        "A", "B", "C", "D", "E", "G", "H", "I", "J", "F",
+        "FA", "FB", "FC", "FD", "FE", "FF", "FG", "FH",
+        "K", "KA", "KB", "KC", "L", "M", "N", "O", "P", "PA",
+        "Q", "QA", "R", "RA", "S", "T", "U", "V", "W",
+        "WA", "X", "Y", "YA"
     ]
+
     for row in rows:
         row = sorted(row, key=lambda b: b[0])
         cells = []
@@ -595,31 +630,34 @@ def extract_text_from_cells(image, rows, count, file_name):
             cell_img = image[y:y + h, x:x + w]
             if i == 2:
                 processed = preprocess_cell(cell_img)
-                item_number, key = extract_digits(processed, file_name)
+                item_number, _ = extract_digits(processed, file_name)
                 cells.append(item_number)
 
         cat_id = CATEGORY_IDS[count]
         item_no = cells[0] if len(cells) > 0 else ''
         count += 1
 
-        if len(item_no) == 3 and item_no.find("?") == -1: #TO EDIT FOR REVIEW W/ IF ELSE
-            print(f"[DEBUG] Processing row {count}, length of row: {len(row)}")
+        if len(item_no) == 3 and "?" not in item_no:
+            key = ""
+            print(f"[DEBUG] Processing row {count}, valid vote: {item_no}")
             extracted.append({
                 'Category ID': cat_id,
                 'Item Number': item_no,
-                'Status' : 'readable',
-                'Key' : key
+                'Status': 'readable',
+                'Key': key
             })
         else:
-            print(f"Not valid vote {item_no}.")
+            key = upload_vote_to_s3(cell_img, file_name, cat_id)
+            print(f"[DEBUG] Invalid vote in row {count}, uploading to S3: {item_no}")
             extracted.append({
                 'Category ID': cat_id,
-                'Item Number' : item_no,
-                'Status' : 'unreadable',
-                'Key' : key
+                'Item Number': item_no,
+                'Status': 'unreadable',
+                'Key': key
             })
-    return extracted
 
+    return extracted
+#------------------
 def badge_id_exists(session_id: str, badge_id: str) -> bool:
     session = get_db_session()
     try:
@@ -642,15 +680,22 @@ def readable_badge_id_exists(session_id: str, badge_id: str) -> bool:
     finally:
         session.close()
     return exists
-
+#----------------------  changed this to upload tos3 only if low cofidence(aka "?")
 def process_image(image_bytes, file_name, session_id: str):
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     image_np = np.array(image)
     image_cv = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
 
     image_cv = deskew_image(image_cv)
+
     badge_id, key = process_badge_id(image_cv, model, file_name)
     validity = True
+
+   
+    if key != "":
+        # upload the ballot image to S3 if the badge id is bad
+        ballot_key = upload_badge_to_s3(image_cv, file_name, object_prefix="problematic_ballots")
+        print(f"[S3] Uploaded full ballot due to badge ID issue: {ballot_key}")
 
     if key == "" and (badge_id_exists(session_id, badge_id) and not readable_badge_id_exists(session_id, badge_id)):
         insert_badge(session_id, badge_id, 'readable', key, file_name, validity)
@@ -660,14 +705,10 @@ def process_image(image_bytes, file_name, session_id: str):
     else:
         insert_badge(session_id, badge_id, 'unreadable', key, file_name, validity)
 
-    print(f"Extracted Badge ID: {badge_id}")
-
+    #changed to extract votes without uplaoding 
     boxes = detect_table_cells(image_cv)
     boxes = filter_valid_boxes(boxes, min_y=450)
-    print(f"Found {len(boxes)} boxes")
-
     left_boxes, right_boxes = split_tables_by_x_gap(boxes)
-
     left_rows = group_cells_by_rows(left_boxes)
     right_rows = group_cells_by_rows(right_boxes)
     tables = [left_rows, right_rows]
@@ -682,8 +723,8 @@ def process_image(image_bytes, file_name, session_id: str):
             category_id = item['Category ID']
             vote = item['Item Number']
             status = item['Status']
-            key = item ['Key']
-            insert_vote(badge_id, file_name, category_id, vote, status, validity, key)
+            key = item['Key']
+            insert_vote(badge_id, file_name, category_id, vote, status, True if status == "readable" else False, key)
             all_extracted.append(item)
         count += len(rows)
     return all_extracted
