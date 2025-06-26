@@ -7,6 +7,8 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 from flask_cors import CORS
 from sqlalchemy import func, desc
 from werkzeug.utils import secure_filename
+from dotenv import load_dotenv
+load_dotenv()
 from db_model import (
     ValidBadgeIDs,
     Ballot,
@@ -22,9 +24,9 @@ from io import BytesIO
 import zipfile
 from botocore.exceptions import NoCredentialsError, ClientError
 from collections import defaultdict, Counter
-
 import random
-
+from tasks import preprocess_zip_task  
+from flask import jsonify
 s3 = boto3.client('s3')
 bucket_name = 'techbloom-ballots'
 
@@ -34,6 +36,10 @@ app.secret_key = 'secret-key'
 
 ALLOWED_BADGE_EXTENSIONS = {'csv', 'txt'}
 ALLOWED_ZIP_EXTENSIONS = {'zip'}
+#new
+from celery_app import make_celery
+
+celery = make_celery()
 
 def get_db_session():
     return SessionLocal()
@@ -62,6 +68,7 @@ def is_junk_file(file_info):
         file_info.is_dir() or
         not basename.strip()
     )
+
 
 @app.route('/login')
 def login():
@@ -123,7 +130,6 @@ def upload_files():
         flash('Please log in or create a session first.')
         return redirect(url_for('login'))
 
-
     db_session = get_db_session()
     joined_existing = session.get('joined_existing', False)
     existing_badges = db_session.query(ValidBadgeIDs).filter_by(session_id=session_id).first()
@@ -146,21 +152,20 @@ def upload_files():
         if badgeFile and allowed_file(badgeFile.filename, ALLOWED_BADGE_EXTENSIONS):
             try:
                 badge_lines = badgeFile.read().decode('utf-8').splitlines()
-            except UnicodeDecodeError as e:
+                for line in badge_lines:
+                    badge_id = line.strip()
+                    if badge_id:
+                        db_session.add(ValidBadgeIDs(session_id=session_id, badge_id=badge_id))
+                db_session.commit()
+                flash('Badge IDs uploaded successfully.')
+            except UnicodeDecodeError:
                 flash('Badge file must be UTF-8 encoded text (.csv or .txt).', 'error')
                 db_session.close()
                 return redirect(request.url)
-            for line in badge_lines:
-                badge_id = line.strip()
-                if badge_id:
-                    db_session.add(ValidBadgeIDs(session_id=session_id, badge_id=badge_id))
-            db_session.commit()
-            flash('Badge IDs uploaded successfully.')
         elif badgeFile:
             flash('Invalid badge file. Must be .csv or .txt')
             db_session.close()
             return redirect(request.url)
-
 
         if zipFile and allowed_file(zipFile.filename, ALLOWED_ZIP_EXTENSIONS):
             filename = secure_filename(zipFile.filename)
@@ -171,38 +176,21 @@ def upload_files():
                 db_session.add(UploadedZip(session_id=session_id, filename=filename))
                 db_session.commit()
 
-                zip_stream = BytesIO(zip_bytes)
                 try:
-                    with zipfile.ZipFile(zip_stream) as archive:
-                        processed_count = 0
-                        for file_info in archive.infolist():
-                            if is_junk_file(file_info):
-                                continue
-                            if file_info.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-                                existing_file = db_session.query(OCRResult).filter_by(filename=file_info.filename,
-                                                                                      session_id=session_id).first()
-                                if existing_file:
-                                    print(f"Skipping duplicate file: {file_info.filename}")
-                                    continue
+                    local_zip_path = f"/tmp/{filename}"
+                    with open(local_zip_path, "wb") as f:
+                        f.write(zip_bytes)
 
-                                with archive.open(file_info) as image_file:
-                                    image_data = image_file.read()
-                                    image_key = f"{session_id}/ballots/{file_info.filename}"
-                                    upload_to_s3(BytesIO(image_data), bucket_name, image_key)
-                                    try:
-                                        ocr_text = process_image(image_data, file_info.filename, session_id)
-                                        db_session.add(OCRResult(
-                                            session_id=session_id,
-                                            filename=file_info.filename,
-                                            extracted_text=json.dumps(ocr_text)
-                                        ))
-                                        db_session.commit()
-                                        processed_count += 1
-                                    except Exception as e:
-                                        print(f"OCR failed for {file_info.filename}: {e}")
-                        flash(f'Successfully processed {processed_count} ballot images.')
+                    # Call Celery task here
+                    preprocess_zip_task.delay(local_zip_path, session_id)
+
+                    flash("ZIP file uploaded. Processing started in background.")
                 except zipfile.BadZipFile:
                     flash('Invalid ZIP file.')
+                    db_session.close()
+                    return redirect(request.url)
+                except Exception as e:
+                    flash(f'Error saving or processing ZIP: {str(e)}')
                     db_session.close()
                     return redirect(request.url)
             else:
@@ -218,7 +206,11 @@ def upload_files():
         return redirect(url_for('dashboard'))
 
     db_session.close()
-    return render_template('templates/a_upload.html', joined_existing=joined_existing and (existing_badges or existing_zip), session_id=session_id)
+    return render_template(
+        'templates/a_upload.html',
+        joined_existing=joined_existing and (existing_badges or existing_zip),
+        session_id=session_id
+    )
 
 @app.route('/dashboard')
 def dashboard():
