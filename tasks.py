@@ -1,0 +1,61 @@
+# tasks.py
+
+
+import zipfile
+import os
+from io import BytesIO
+from celery import Celery
+from easy_ocr import process_image, badge_id_exists, readable_badge_id_exists
+from db_utils import insert_vote, insert_badge
+from db_model import get_db_session, ValidBadgeIDs, Ballot, OCRResult
+import boto3
+import json
+from celery_app import make_celery
+
+celery = make_celery()
+
+
+bucket_name = 'techbloom-ballots'
+s3_client = boto3.client('s3')
+
+
+
+@celery.task(bind=True)
+def preprocess_zip_task(self, zip_path, session_id):
+    db_session = get_db_session()
+    processed_count = 0
+
+    try:
+        with zipfile.ZipFile(zip_path, 'r') as archive:
+            for file_info in archive.infolist():
+                if file_info.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+                    with archive.open(file_info) as image_file:
+                        image_data = image_file.read()
+
+                    image_key = f"{session_id}/ballots/{file_info.filename}"
+                    s3_client.upload_fileobj(BytesIO(image_data), bucket_name, image_key)
+
+                    # Run OCR on the image (your existing function)
+                    try:
+                        ocr_text = process_image(image_data, file_info.filename, session_id)
+                        
+                        # Save OCR results to DB
+                        db_session.add(OCRResult(
+                            session_id=session_id,
+                            filename=file_info.filename,
+                            extracted_text=json.dumps(ocr_text)
+                        ))
+                        db_session.commit()
+                        processed_count += 1
+                    except Exception as e:
+                        print(f"OCR failed for {file_info.filename}: {e}")
+
+        return {'status': 'completed', 'processed_count': processed_count}
+    except Exception as e:
+        print(f"Error processing ZIP file: {e}")
+        return {'status': 'failed', 'error': str(e)}
+    finally:
+        db_session.close()
+        # Optional: cleanup zip file after processing
+        if os.path.exists(zip_path):
+            os.remove(zip_path)
