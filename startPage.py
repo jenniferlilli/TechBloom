@@ -123,64 +123,55 @@ def upload_files():
         flash('Please log in or create a session first.')
         return redirect(url_for('login'))
 
-
     db_session = get_db_session()
     joined_existing = session.get('joined_existing', False)
-    existing_badges = db_session.query(ValidBadgeIDs).filter_by(session_id=session_id).first()
-    existing_zip = db_session.query(UploadedZip).filter_by(session_id=session_id).first()
 
     if request.method == 'POST':
         badgeFile = request.files.get('badge_file')
         zipFile = request.files.get('zip_file')
+        excelFile = request.files.get('excel_file')
 
-        if not badgeFile and not zipFile and joined_existing:
-            if joined_existing and (existing_badges or existing_zip):
-                flash('Empty session, please reupload.')
-                db_session.close()
-                return redirect(url_for('dashboard'))
-            else:
-                flash('Please upload both badge and ZIP files.')
-                db_session.close()
-                return redirect(request.url)
-
-        if badgeFile and allowed_file(badgeFile.filename, ALLOWED_BADGE_EXTENSIONS):
-            try:
-                badge_lines = badgeFile.read().decode('utf-8').splitlines()
-            except UnicodeDecodeError as e:
-                flash('Badge file must be UTF-8 encoded text (.csv or .txt).', 'error')
-                db_session.close()
-                return redirect(request.url)
-            for line in badge_lines:
-                badge_id = line.strip()
-                if badge_id:
-                    db_session.add(ValidBadgeIDs(session_id=session_id, badge_id=badge_id))
-            db_session.commit()
-            flash('Badge IDs uploaded successfully.')
-        elif badgeFile:
-            flash('Invalid badge file. Must be .csv or .txt')
+        if not joined_existing and (not badgeFile or not zipFile or not excelFile):
+            flash('All three files are required for new sessions.')
             db_session.close()
             return redirect(request.url)
 
-
-        if zipFile and allowed_file(zipFile.filename, ALLOWED_ZIP_EXTENSIONS):
-            filename = secure_filename(zipFile.filename)
-            zip_bytes = zipFile.read()
-            zip_key = f'{session_id}/{filename}'
-
-            if upload_to_s3(BytesIO(zip_bytes), bucket_name, zip_key):
-                db_session.add(UploadedZip(session_id=session_id, filename=filename))
+        # badge process
+        if badgeFile and allowed_file(badgeFile.filename, ALLOWED_BADGE_EXTENSIONS):
+            try:
+                badge_lines = badgeFile.read().decode('utf-8').splitlines()
+                for line in badge_lines:
+                    badge_id = line.strip()
+                    if badge_id:
+                        db_session.add(ValidBadgeIDs(session_id=session_id, badge_id=badge_id))
                 db_session.commit()
+                flash('Badge IDs uploaded successfully.')
+            except UnicodeDecodeError:
+                flash('Badge file must be UTF-8 encoded (.csv or .txt).')
+                db_session.close()
+                return redirect(request.url)
 
-                zip_stream = BytesIO(zip_bytes)
-                try:
-                    with zipfile.ZipFile(zip_stream) as archive:
+        # zip process
+        if zipFile and allowed_file(zipFile.filename, ALLOWED_ZIP_EXTENSIONS):
+            try:
+                filename = secure_filename(zipFile.filename)
+                zip_bytes = zipFile.read()
+                zip_key = f'{session_id}/{filename}'
+
+                if upload_to_s3(BytesIO(zip_bytes), bucket_name, zip_key):
+                    db_session.add(UploadedZip(session_id=session_id, filename=filename))
+                    db_session.commit()
+
+                    with zipfile.ZipFile(BytesIO(zip_bytes)) as archive:
                         processed_count = 0
                         for file_info in archive.infolist():
                             if is_junk_file(file_info):
                                 continue
                             if file_info.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-                                existing_file = db_session.query(OCRResult).filter_by(filename=file_info.filename,
-                                                                                      session_id=session_id).first()
+                                existing_file = db_session.query(OCRResult).filter_by(
+                                    filename=file_info.filename,
+                                    session_id=session_id
+                                ).first()
                                 if existing_file:
                                     print(f"Skipping duplicate file: {file_info.filename}")
                                     continue
@@ -196,29 +187,67 @@ def upload_files():
                                             filename=file_info.filename,
                                             extracted_text=json.dumps(ocr_text)
                                         ))
-                                        db_session.commit()
                                         processed_count += 1
                                     except Exception as e:
                                         print(f"OCR failed for {file_info.filename}: {e}")
-                        flash(f'Successfully processed {processed_count} ballot images.')
-                except zipfile.BadZipFile:
-                    flash('Invalid ZIP file.')
-                    db_session.close()
-                    return redirect(request.url)
-            else:
-                flash('Failed to upload ZIP to S3.')
+                    db_session.commit()
+                    flash(f'Successfully processed {processed_count} ballot images.')
+                else:
+                    flash('Failed to upload ZIP file to S3.')
+            except zipfile.BadZipFile:
+                flash('Invalid ZIP file.')
                 db_session.close()
                 return redirect(request.url)
-        elif zipFile:
-            flash('Invalid file type. ZIP required.')
-            db_session.close()
-            return redirect(request.url)
+
+        #process excel into list
+        if excelFile and allowed_file(excelFile.filename, {'xlsx'}):
+            try:
+                from openpyxl import load_workbook
+
+                workbook = load_workbook(excelFile, data_only=True)
+                sheet = workbook.active
+
+                product_data = {}  
+
+                for row in sheet.iter_rows(min_row=2, values_only=True):  
+                    if len(row) < 3:
+                        continue
+
+                    product_name = row[0]
+                    category_id = row[1]
+                    product_number = row[2]
+
+                    if not all([product_name, category_id, product_number]):
+                        continue
+
+                    category_id = str(category_id).strip().upper()
+                    product_number = str(product_number).strip()
+                    product_name = str(product_name).strip()
+
+                    if category_id not in product_data:
+                        product_data[category_id] = {}
+
+                    product_data[category_id][product_number] = product_name
+                
+                session['product_data'] = product_data
+                print("Parsed Product Data:", product_data)
+
+                flash('Excel file processed successfully.')
+                '''
+                filename = secure_filename(excelFile.filename)
+                key = f'{session_id}/{filename}'
+                upload_to_s3(BytesIO(excelFile.read()), bucket_name, key)
+                flash('Excel file uploaded.')
+                '''
+            except Exception as e:
+                flash('Excel file processing failed.')
+                print(f"Excel processing error: {e}")
 
         db_session.close()
         return redirect(url_for('dashboard'))
 
-    db_session.close()
-    return render_template('templates/a_upload.html', joined_existing=joined_existing and (existing_badges or existing_zip), session_id=session_id)
+    return render_template('templates/a_upload.html', joined_existing=joined_existing)
+
 
 @app.route('/dashboard')
 def dashboard():
@@ -229,6 +258,7 @@ def dashboard():
 
     db_session = get_db_session()
 
+    # Fetch valid votes
     vote_records = (
         db_session.query(BallotVotes)
         .join(Ballot, BallotVotes.badge_id == Ballot.badge_id)
@@ -242,22 +272,86 @@ def dashboard():
         .all()
     )
 
+    # Normalization helper
+    def normalize_vote(v):
+        return re.sub(r"[^\w\d]", "", (v or "").strip()).upper()
+
+    seen_votes = set()
     category_votes = defaultdict(list)
 
     for vote in vote_records:
-        cleaned_vote = (vote.vote or "").strip()
-        if vote.category_id:
-            category_votes[vote.category_id.upper()].append(cleaned_vote)
+        if not vote.category_id:
+            continue
+
+        category = vote.category_id.upper()
+        norm_vote = normalize_vote(vote.vote)
+        key = (vote.badge_id, category, norm_vote)
+
+        if key not in seen_votes:
+            category_votes[category].append(norm_vote)
+            seen_votes.add(key)
 
     top3_per_category = {}
-
     for category, votes in category_votes.items():
         counts = Counter(votes)
-        top_votes = counts.most_common(3)  
+        top_votes = counts.most_common(3)
         top3_per_category[category] = top_votes
-    print(top3_per_category)
+
+    # Debug print
+    print(f"Session: {session_id}")
+    print(f"Unique ballots counted: {len(set([v.badge_id for v in vote_records]))}")
+    print(f"Vote records retrieved: {len(vote_records)}")
+    print("Top 3 per category:")
+    for cat, results in top3_per_category.items():
+        print(f"Category {cat}: {results}")
+
     db_session.close()
-    return render_template("templates/a_dashboard.html", top3_per_category=top3_per_category)
+    product_data = session.get('product_data', {})
+    return render_template("templates/a_dashboard.html",
+                       top3_per_category=top3_per_category,
+                       product_data=product_data)
+
+
+@app.route('/export_excel')
+def export_excel():
+    session_id = session.get("session_id")
+    if not session_id:
+        flash('Please log in or create a session first.')
+        return redirect(url_for('login'))
+
+    top3_per_category = get_top3_votes_by_category(session_id)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Top 3 Results"
+
+    ws.append([
+        "", "Catagory ID Field", "Alpha",
+        "1st Place ID", "1st Votes #",
+        "2nd Place ID", "2nd Votes #",
+        "3rd Place ID", "3rd Votes #"
+    ])
+
+    for category_id, top_votes in top3_per_category.items():
+        row = ["", "", category_id]
+        for i in range(3):
+            if i < len(top_votes):
+                row.extend([top_votes[i][0], top_votes[i][1]])
+            else:
+                row.extend(["", ""])
+        ws.append(row)
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    return send_file(
+        output,
+        download_name="top3_votes.xlsx",
+        as_attachment=True,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+
 
 @app.route('/review')
 def review_dashboard():

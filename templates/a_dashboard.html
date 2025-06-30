@@ -289,7 +289,7 @@
           <thead>
             <tr>
               <th>Place</th>
-              <th>Item Number</th>
+              <th>Item Name</th>
             </tr>
           </thead>
           <tbody>
@@ -303,7 +303,12 @@
                 {% endif %}
               </td>
               <td class="item-cell">
-                <span class="tooltip">{{ item_number }}
+                <span class="tooltip">
+                  {% if product_data.get(category) and product_data[category].get(item_number) %}
+                    {{ product_data[category][item_number] }}
+                  {% else %}
+                    {{ item_number }}
+                  {% endif %}
                   <span class="tooltiptext">{{ count }} votes</span>
                 </span>
               </td>
