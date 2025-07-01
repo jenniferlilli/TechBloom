@@ -2,7 +2,9 @@ import os
 import boto3
 import json
 import re
+import uuid
 from uuid import uuid4
+from uuid import UUID
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 from flask_cors import CORS
 from sqlalchemy import func, desc
@@ -36,7 +38,7 @@ app.secret_key = 'secret-key'
 
 ALLOWED_BADGE_EXTENSIONS = {'csv', 'txt'}
 ALLOWED_ZIP_EXTENSIONS = {'zip'}
-#new
+
 from celery_app import make_celery
 
 celery = make_celery()
@@ -177,12 +179,23 @@ def upload_files():
                 db_session.commit()
 
                 try:
-                    local_zip_path = f"/tmp/{filename}"
+                    UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads')
+                    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+                    local_zip_path = os.path.join(UPLOAD_FOLDER, filename)
+
                     with open(local_zip_path, "wb") as f:
                         f.write(zip_bytes)
 
-                    # Call Celery task here
-                    preprocess_zip_task.delay(local_zip_path, session_id)
+                    if os.name == 'nt':
+                        wsl_zip_path = local_zip_path.replace('C:\\', '/mnt/c/').replace('\\', '/')
+                    else:
+                        wsl_zip_path = local_zip_path
+
+                    print("ZIP saved at:", local_zip_path)
+                    print("WSL path sent to Celery:", wsl_zip_path)
+
+                    preprocess_zip_task.delay(wsl_zip_path, session_id)
 
                     flash("ZIP file uploaded. Processing started in background.")
                 except zipfile.BadZipFile:
@@ -251,21 +264,25 @@ def dashboard():
     db_session.close()
     return render_template("templates/a_dashboard.html", top3_per_category=top3_per_category)
 
+
+
 @app.route('/review')
 def review_dashboard():
     session_id = session.get("session_id")
     if not session_id:
         flash("Please log in or create a session first.")
         return redirect(url_for("login"))
+
+    session_uuid = uuid.UUID(session_id)
     db_session = get_db_session()
-    
+
 
     ballots_with_badge_issues = (
         db_session.query(Ballot)
-        .filter(Ballot.session_id == session_id,
-                Ballot.badge_status == 'unreadable')
+        .filter(Ballot.session_id == session_uuid, Ballot.badge_status == 'unreadable')
         .all()
     )
+    
     badges_data = []
     for ballot in ballots_with_badge_issues:
         s3_url = None
@@ -277,24 +294,22 @@ def review_dashboard():
             )
         badges_data.append({
             'name': ballot.name,
-            'id' : ballot.id,
+            'id': ballot.id,
             'badge_id': ballot.badge_id,
             's3_url': s3_url,
         })
 
+   
     votes_with_errors = (
         db_session.query(BallotVotes)
         .join(Ballot, BallotVotes.ballot_id == Ballot.id)
         .filter(
-            Ballot.session_id == session_id,
-            Ballot.badge_status == "readable",
-            Ballot.validity == True,
+            Ballot.session_id == session_uuid,
             BallotVotes.vote_status == "unreadable",
-            BallotVotes.is_valid == True
         )
         .all()
-    )
-    
+    )    
+
     votes_data = []
     for vote in votes_with_errors:
         s3_url = None
@@ -313,6 +328,13 @@ def review_dashboard():
             'name': vote.name
         })
     print(votes_data)
+    print("Session ID from session:", session_id, type(session_id))
+    print("Converted session UUID:", session_uuid, type(session_uuid))
+
+    print("Session ID:", session_id)
+    print("Bad ballots found:", len(badges_data))
+    print("Unreadable votes found:", len(votes_data))
+
     db_session.close()
     return render_template('templates/a_review_db.html', badges=badges_data, votes=votes_data)
 
@@ -348,7 +370,7 @@ def fix_vote():
     if vote.key:
         try:
             s3.delete_object(Bucket=bucket_name, Key=vote.key)
-            vote.key = ""  # Clear the key after deletion
+            vote.key = "" 
         except Exception as e:
             print(f"Failed to delete S3 object {vote.key}: {e}")
 
@@ -393,7 +415,7 @@ def fix_badge():
 
     ballot.badge_id = new_badge
     print(f"Before update: badge_status = {ballot.badge_status}")
-    ballot.badge_status = 'readable'  # or the correct new status
+    ballot.badge_status = 'readable'  
     print(f"After update: badge_status = {ballot.badge_status}")
     ballot.validity = is_valid
     ballot.s3_key = ""
