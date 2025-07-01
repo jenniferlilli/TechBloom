@@ -1,6 +1,3 @@
-# tasks.py
-
-
 import zipfile
 import os
 from io import BytesIO
@@ -35,11 +32,9 @@ def preprocess_zip_task(self, zip_path, session_id):
                     image_key = f"{session_id}/ballots/{file_info.filename}"
                     s3_client.upload_fileobj(BytesIO(image_data), bucket_name, image_key)
 
-                    # Run OCR on the image (your existing function)
                     try:
                         ocr_text = process_image(image_data, file_info.filename, session_id)
-                        
-                        # Save OCR results to DB
+
                         db_session.add(OCRResult(
                             session_id=session_id,
                             filename=file_info.filename,
@@ -56,6 +51,5 @@ def preprocess_zip_task(self, zip_path, session_id):
         return {'status': 'failed', 'error': str(e)}
     finally:
         db_session.close()
-        # Optional: cleanup zip file after processing
         if os.path.exists(zip_path):
             os.remove(zip_path)
