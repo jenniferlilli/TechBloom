@@ -54,15 +54,17 @@ def preprocess_zip_task(self, zip_path, session_id):
                         ))
                         db_session.commit()
 
-                        for item in extracted_votes:
+                        for category, vote_value in ocr_text.items():
                             db_session.add(BallotVotes(
-                                ballot_id=new_ballot.id,
-                                category_id=item['category_id'],
-                                vote=item['vote'],
-                                vote_status=item['status'],
-                                is_valid=item['status'] == 'readable',
-                                key=item['key']
-                            ))
+                            ballot_id=new_ballot.id,
+                            badge_id=badge_id,
+                            category_id=category,
+                            vote_status='unreadable' if not vote_value.isdigit() else 'readable',
+                            is_valid=vote_value.isdigit(),
+                            vote=vote_value,
+                            key=image_key
+    ))
+
                         db_session.commit()
 
                         processed_count += 1
