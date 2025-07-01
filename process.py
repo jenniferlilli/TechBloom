@@ -1,4 +1,4 @@
-#need to test with files
+
 import os
 import zipfile
 
@@ -22,7 +22,6 @@ def extractImages(zipPath, extractTo):
                     imagePaths.append(os.path.join(root, file))
     return imagePaths
 
-# Process the latest badge file and zip file
 badge_file = None
 zip_file = None
 
