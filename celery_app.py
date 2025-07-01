@@ -4,7 +4,7 @@ def make_celery(app_name=__name__):
     celery = Celery(
         app_name,
         broker='redis://localhost:6379/0',
-        backend=None  # You can add result backend if needed
+        backend=None 
     )
     celery.conf.update(
         task_serializer='json',
