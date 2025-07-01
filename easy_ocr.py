@@ -210,7 +210,6 @@ def preprocess(image):
 
 def split_roi_into_digit_boxes(image, expected_rows=5):
 
-    # Step 1: Enhanced preprocessing
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     blurred = cv2.bilateralFilter(gray, 9, 75, 75)
 
@@ -225,7 +224,6 @@ def split_roi_into_digit_boxes(image, expected_rows=5):
         C=2
     )
 
-    # Step 2: Detect REG box
     contours, _ = cv2.findContours(binary.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     reg_rect = None
     max_area = 0
@@ -244,7 +242,7 @@ def split_roi_into_digit_boxes(image, expected_rows=5):
     x, y, w, h = reg_rect
     roi = image[y:y + h, x:x + w]
 
-    # Step 3: Clean horizontal underline detection
+
     gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
     enhanced_roi = clahe.apply(gray_roi)
@@ -442,7 +440,6 @@ def process_badge_id(image, model, file_name):
 
         processed_digits.append(processed)
 
-    # chnaged: Batching transforming all digits 
     input_batch = torch.stack([transform(d) for d in processed_digits])
     with torch.no_grad():
         output_batch = model(input_batch)
@@ -599,7 +596,7 @@ def split_vote_cell_into_digits(cell_img):
     digit_boxes = []
     for cnt in contours:
         x, y, w, h = cv2.boundingRect(cnt)
-        if h > 10 and w > 3:  # filter noise; adjust as needed
+        if h > 10 and w > 3: 
             digit_boxes.append((x, y, w, h))
 
     digit_boxes = sorted(digit_boxes, key=lambda b: b[0]) 
@@ -680,7 +677,7 @@ def readable_badge_id_exists(session_id: str, badge_id: str) -> bool:
     finally:
         session.close()
     return exists
-#----------------------  changed this to upload tos3 only if low cofidence(aka "?")
+#----------------------  changed this to upload tos3 only if low cofidence(?)
 def process_image(image_bytes, file_name, session_id: str):
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     image_np = np.array(image)
@@ -691,21 +688,12 @@ def process_image(image_bytes, file_name, session_id: str):
     badge_id, key = process_badge_id(image_cv, model, file_name)
     validity = True
 
-   
+
     if key != "":
-        # upload the ballot image to S3 if the badge id is bad
         ballot_key = upload_badge_to_s3(image_cv, file_name, object_prefix="problematic_ballots")
         print(f"[S3] Uploaded full ballot due to badge ID issue: {ballot_key}")
 
-    if key == "" and (badge_id_exists(session_id, badge_id) and not readable_badge_id_exists(session_id, badge_id)):
-        insert_badge(session_id, badge_id, 'readable', key, file_name, validity)
-    elif key == "" and ((not badge_id_exists(session_id, badge_id)) or readable_badge_id_exists(session_id, badge_id)):
-        validity = False
-        insert_badge(session_id, badge_id, 'readable', key, file_name, validity)
-    else:
-        insert_badge(session_id, badge_id, 'unreadable', key, file_name, validity)
-
-    #changed to extract votes without uplaoding 
+  
     boxes = detect_table_cells(image_cv)
     boxes = filter_valid_boxes(boxes, min_y=450)
     left_boxes, right_boxes = split_tables_by_x_gap(boxes)
@@ -717,14 +705,22 @@ def process_image(image_bytes, file_name, session_id: str):
     count = 0
     for table_idx, rows in enumerate(tables):
         if table_idx == 0:
-            rows = rows[1:]
+            rows = rows[1:]  
         extracted_cells = extract_text_from_cells(image_cv, rows, count, file_name)
         for item in extracted_cells:
             category_id = item['Category ID']
             vote = item['Item Number']
             status = item['Status']
             key = item['Key']
-            insert_vote(badge_id, file_name, category_id, vote, status, True if status == "readable" else False, key)
-            all_extracted.append(item)
+
+            
+            all_extracted.append({
+                'category_id': category_id,
+                'vote': vote,
+                'status': status,
+                'key': key
+            })
         count += len(rows)
+
+    print(f"[process_image] Extracted {len(all_extracted)} votes from {file_name}")
     return all_extracted
