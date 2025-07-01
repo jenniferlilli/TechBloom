@@ -232,13 +232,15 @@ def dashboard():
         flash('Please log in or create a session first.')
         return redirect(url_for('login'))
 
+    session_uuid = uuid.UUID(session_id)  
+
     db_session = get_db_session()
 
     vote_records = (
         db_session.query(BallotVotes)
-        .join(Ballot, BallotVotes.badge_id == Ballot.badge_id)
+        .join(Ballot, BallotVotes.ballot_id == Ballot.id)
         .filter(
-            Ballot.session_id == session_id,
+            Ballot.session_id == session_uuid,
             Ballot.badge_status == 'readable',
             Ballot.validity == True,
             BallotVotes.is_valid == True,
@@ -248,18 +250,17 @@ def dashboard():
     )
 
     category_votes = defaultdict(list)
-
     for vote in vote_records:
         cleaned_vote = (vote.vote or "").strip()
         if vote.category_id:
             category_votes[vote.category_id.upper()].append(cleaned_vote)
 
     top3_per_category = {}
-
     for category, votes in category_votes.items():
         counts = Counter(votes)
-        top_votes = counts.most_common(3)  
+        top_votes = counts.most_common(3)
         top3_per_category[category] = top_votes
+
     print(top3_per_category)
     db_session.close()
     return render_template("templates/a_dashboard.html", top3_per_category=top3_per_category)
