@@ -539,6 +539,10 @@ def preprocess_cell(cell_img):
     resized = cv2.resize(thresh, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
     return resized
 #-------------------------
+#if the extracted vote number has "?" or  length isnt 3 -- upload cropped vote cell to S3 else  dont upload
+#store returned S3 key for unreadable votes (to show image on review dashboard)
+
+Added print debug logs: show valid vs invalid vote and category
 def extract_digits(cell_img, file_name):
     h, w = cell_img.shape[:2]
     segment_width = w // 3
@@ -677,7 +681,10 @@ def readable_badge_id_exists(session_id: str, badge_id: str) -> bool:
     finally:
         session.close()
     return exists
-#----------------------  changed this to upload tos3 only if low cofidence(?)
+#---------------------- 
+#if badge ID is unreadable (low confidence or has “?”) -- upload the full ballot image to S3 under problematic_ballots
+#prinst debug log about upload
+#when looping over votes -- ollect category_id, vote, status (readable or unreadable) and S3 key from each
 def process_image(image_bytes, file_name, session_id: str):
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     image_np = np.array(image)
