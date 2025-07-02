@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from db_model import (
     UserSession, ValidBadgeIDs, UploadedZip, OCRResult,
-    BallotVotes, Ballot,
+    BallotVotes, Ballot, Product,
     SessionLocal
 )
 
@@ -63,3 +63,17 @@ def insert_badge(session_id: str, badge_id: str, status: str, key: str, name: st
         session.add(ballot)
         session.commit()
 
+def insert_products(session_id: str, products: list[tuple[str, str, str]]):
+    with SessionLocal() as session:
+        session.query(Product).filter_by(session_id=session_id).delete()
+
+        for category_id, product_number, product_name in products:
+            product = Product(
+                session_id=session_id,
+                category_id=category_id,
+                product_number=product_number,
+                product_name=product_name
+            )
+            session.add(product)
+
+        session.commit()

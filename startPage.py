@@ -16,12 +16,14 @@ from db_model import (
     BallotVotes,
     SessionLocal,
 )
-from db_utils import validate_user_session, insert_user_session
+from db_utils import validate_user_session, insert_user_session, insert_products
 from easy_ocr import process_image, badge_id_exists, readable_badge_id_exists
 from io import BytesIO
 import zipfile
 from botocore.exceptions import NoCredentialsError, ClientError
 from collections import defaultdict, Counter
+from openpyxl import load_workbook
+
 
 import random
 
@@ -199,55 +201,48 @@ def upload_files():
                 db_session.close()
                 return redirect(request.url)
 
-        #process excel into list
+        # process excel into list
         if excelFile and allowed_file(excelFile.filename, {'xlsx'}):
             try:
-                from openpyxl import load_workbook
-
                 workbook = load_workbook(excelFile, data_only=True)
                 sheet = workbook.active
 
-                product_data = {}  
+                product_data = {}
+                product_list = []
 
                 for row in sheet.iter_rows(min_row=2, values_only=True):  
                     if len(row) < 3:
                         continue
 
-                    product_name = row[0]
-                    category_id = row[1]
-                    product_number = row[2]
+                    product_name = str(row[0]).strip()
+                    category_id = str(row[1]).strip().upper()
+                    product_number = str(row[2]).strip()
 
                     if not all([product_name, category_id, product_number]):
                         continue
 
-                    category_id = str(category_id).strip().upper()
-                    product_number = str(product_number).strip()
-                    product_name = str(product_name).strip()
-
+                    # update session cache
                     if category_id not in product_data:
                         product_data[category_id] = {}
-
                     product_data[category_id][product_number] = product_name
-                
-                session['product_data'] = product_data
-                print("Parsed Product Data:", product_data)
 
-                flash('Excel file processed successfully.')
-                '''
-                filename = secure_filename(excelFile.filename)
-                key = f'{session_id}/{filename}'
-                upload_to_s3(BytesIO(excelFile.read()), bucket_name, key)
-                flash('Excel file uploaded.')
-                '''
+                    # prepare for DB insert
+                    product_list.append((category_id, product_number, product_name))
+
+                # save to session + DB
+                session['product_data'] = product_data
+                insert_products(session_id, product_list)
+
+                print("Parsed Product Data:", product_data)
+                flash('Excel file processed and stored successfully.')
+
             except Exception as e:
                 flash('Excel file processing failed.')
                 print(f"Excel processing error: {e}")
-
         db_session.close()
         return redirect(url_for('dashboard'))
 
     return render_template('templates/a_upload.html', joined_existing=joined_existing)
-
 
 @app.route('/dashboard')
 def dashboard():
