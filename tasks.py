@@ -32,46 +32,64 @@ def preprocess_zip_task(self, zip_path, session_id):
                     image_key = f"{session_id}/ballots/{file_info.filename}"
                     s3_client.upload_fileobj(BytesIO(image_data), bucket_name, image_key)
 
+                   
+                    badge_id, ocr_result = process_image(image_data, file_info.filename, session_id)
+                    print("Badge ID returned:", badge_id)
+                    print("OCR raw result:", ocr_result)
+
+                 
+                    votes_dict = {}
+                    if isinstance(ocr_result, list):
+                        for item in ocr_result:
+                            category = item.get('category_id')
+                            vote = item.get('vote')
+                            if category and vote:
+                                votes_dict[category] = vote
+                    elif isinstance(ocr_result, dict):
+                        votes_dict = ocr_result
+                    else:
+                        print(f"Unexpected OCR result type: {type(ocr_result)}")
+                        votes_dict = {}
+
+                    print("Converted votes_dict:", votes_dict)
+
                     session_uuid = uuid.UUID(session_id)
                     new_ballot = Ballot(
                         session_id=session_uuid,
                         name=file_info.filename,
-                        badge_status="readable",  
-                        validity=True
+                        badge_status="readable" if badge_id else "unreadable",
+                        validity=True,
+                        badge_id=badge_id
                     )
                     db_session.add(new_ballot)
                     db_session.commit()
 
-                    try:
-                        extracted_votes = process_image(image_data, file_info.filename, session_id)
-                        print("OCR extracted votes:", extracted_votes)
+                    db_session.add(OCRResult(
+                        session_id=session_id,
+                        filename=file_info.filename,
+                        extracted_text=json.dumps(votes_dict)
+                    ))
+                    db_session.commit()
 
-                        
-                        db_session.add(OCRResult(
-                            session_id=session_id,
-                            filename=file_info.filename,
-                            extracted_text=json.dumps(extracted_votes)
+                    for item in ocr_result:       
+                        category = item.get('category_id')
+                        vote_value = votes_dict.get(category)
+                        vote_key = item.get('key')  
+                        db_session.add(BallotVotes(
+                             ballot_id=new_ballot.id,
+                             name=file_info.filename,
+                             category_id=category,
+                             vote=vote_value,
+                             key=vote_key,                   
+                             vote_status='unreadable' if not vote_value.isdigit() else 'readable',
+                             is_valid=vote_value.isdigit(),
+                             badge_id=badge_id
                         ))
-                        db_session.commit()
 
-                        for category, vote_value in ocr_text.items():
-                            db_session.add(BallotVotes(
-                            ballot_id=new_ballot.id,
-                            badge_id=badge_id,
-                            category_id=category,
-                            vote_status='unreadable' if not vote_value.isdigit() else 'readable',
-                            is_valid=vote_value.isdigit(),
-                            vote=vote_value,
-                            key=image_key
-    ))
+                    db_session.commit()
 
-                        db_session.commit()
+                    processed_count += 1
 
-                        processed_count += 1
-
-                    except Exception as e:
-                        print(f"OCR failed for {file_info.filename}: {e}")
-                        
         return {'status': 'completed', 'processed_count': processed_count}
 
     except Exception as e:
