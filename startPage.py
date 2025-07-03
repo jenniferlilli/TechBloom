@@ -81,6 +81,7 @@ def logout():
     return render_template('templates/a_login.html')
 
 
+
 @app.route('/create-session', methods=['GET', 'POST'])
 def create_session():
     if request.method == 'POST':
@@ -97,11 +98,12 @@ def create_session():
         db_session.close()
 
         session['session_id'] = session_id
+        session['short_session_id'] = session_id[:8]  
+
         flash('Generated Session ID successfully.')
         return redirect(url_for('upload_files'))
 
     return render_template('templates/a_createSession.html')
-
 
 
 @app.route('/join-session', methods=['GET', 'POST'])
@@ -128,6 +130,7 @@ def join_session():
 @app.route('/upload-file', methods=['GET', 'POST'])
 def upload_files():
     session_id = session.get('session_id')
+    short_session_id = session.get('short_session_id') 
     if not session_id:
         flash('Please log in or create a session first.')
         return redirect(url_for('login'))
@@ -222,7 +225,7 @@ def upload_files():
     return render_template(
         'templates/a_upload.html',
         joined_existing=joined_existing and (existing_badges or existing_zip),
-        session_id=session_id
+        session_id=session_id, short_session_id = short_session_id
     )
 
 @app.route('/dashboard')
@@ -301,6 +304,7 @@ def review_dashboard():
         })
 
    
+    
     votes_with_errors = (
         db_session.query(BallotVotes)
         .join(Ballot, BallotVotes.ballot_id == Ballot.id)
@@ -309,10 +313,12 @@ def review_dashboard():
             BallotVotes.vote_status == "unreadable",
         )
         .all()
-    )    
+    )
+     
 
     votes_data = []
     for vote in votes_with_errors:
+        print("Vote:", vote.id, "ballot_id:", vote.ballot_id, "badge_id:", vote.badge_id, "linked badge_id from Ballot:", vote.ballot.badge_id)
         s3_url = None
         if vote.key:
             s3_url = s3.generate_presigned_url(
@@ -324,9 +330,9 @@ def review_dashboard():
             'vote_id': vote.id,
             'category': vote.category_id,
             'current_vote': vote.vote,
-            'badge_id': vote.badge_id,
+            'badge_id': vote.ballot.badge_id,
             's3_url': s3_url,
-            'name': vote.name
+            'name': vote.ballot.name
         })
     print(votes_data)
     print("Session ID from session:", session_id, type(session_id))
