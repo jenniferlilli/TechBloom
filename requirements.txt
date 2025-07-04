@@ -1,5 +1,4 @@
 ﻿asgiref==3.8.1
-aws==0.2.5
 awscli==1.40.25
 bcrypt==4.3.0
 blinker==1.9.0

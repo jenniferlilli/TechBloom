@@ -190,10 +190,8 @@ def upload_files():
                     with open(local_zip_path, "wb") as f:
                         f.write(zip_bytes)
 
-                    if os.name == 'nt':
-                        wsl_zip_path = local_zip_path.replace('C:\\', '/mnt/c/').replace('\\', '/')
-                    else:
-                        wsl_zip_path = local_zip_path
+
+                    wsl_zip_path = local_zip_path
 
                     print("ZIP saved at:", local_zip_path)
                     print("WSL path sent to Celery:", wsl_zip_path)

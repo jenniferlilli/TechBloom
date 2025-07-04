@@ -1,9 +1,8 @@
 import io
 import os
 import uuid
-
+import re
 import boto3
-import easyocr #not used rn, will use, have time for a backup
 import cv2
 import numpy as np
 import timm
@@ -11,8 +10,18 @@ import torchvision.transforms as transforms
 import torch
 import torch.nn.functional as F
 from PIL import Image
+from scipy.ndimage import center_of_mass
 from db_utils import insert_vote, insert_badge
 from db_model import get_db_session, ValidBadgeIDs, Ballot
+from google.oauth2 import service_account
+from google.cloud import vision
+import json
+
+with open(r"C:\Users\kathe\Downloads\alert-parsec-464721-v0-0b6d7b3d37d5.json", "r") as f:
+    credentials_info = json.load(f)
+
+credentials = service_account.Credentials.from_service_account_info(credentials_info)
+client = vision.ImageAnnotatorClient(credentials=credentials)
 
 
 model = timm.create_model("resnet18", pretrained=False, num_classes=10)
@@ -31,27 +40,52 @@ transform = transforms.Compose([
     transforms.Normalize((0.1307,), (0.3081,))
 ])
 
+def badge_id_exists(session_id: str, badge_id: str) -> bool:
+    session = get_db_session()
+    try:
+        exists = session.query(ValidBadgeIDs).filter(
+            ValidBadgeIDs.session_id == session_id,
+            ValidBadgeIDs.badge_id == badge_id
+        ).first() is not None
+    finally:
+        session.close()
+    return exists
+
+def readable_badge_id_exists(session_id: str, badge_id: str) -> bool:
+    session = get_db_session()
+    try:
+        exists = session.query(Ballot).filter(
+            Ballot.session_id == session_id,
+            Ballot.badge_id == badge_id,
+            Ballot.badge_status == 'readable'
+        ).first() is not None
+    finally:
+        session.close()
+    return exists
+
 def extract_and_normalize_largest_digit(image):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
     inverted = cv2.bitwise_not(gray)
     _, binary = cv2.threshold(inverted, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
     height, width = binary.shape
-    horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (int(0.9 * width), 1))
+    diag = np.sqrt(width**2 + height**2)
+    hor_kernel_len = max(1, int(0.9 * width))
+    horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (hor_kernel_len, 1))
     detected_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, horizontal_kernel)
     binary = cv2.subtract(binary, detected_lines)
+    open_kernel_size = max(3, int(0.005 * diag))
+    kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (open_kernel_size, open_kernel_size))
+    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_open)
 
-    kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_open, iterations=1)
-
-    kernel_dilate = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
+    dilate_kernel_size = max(3, int(0.03 * diag))
+    kernel_dilate = cv2.getStructuringElement(cv2.MORPH_RECT, (dilate_kernel_size, dilate_kernel_size))
     dilated = cv2.dilate(binary, kernel_dilate, iterations=1)
 
-    height, width = dilated.shape
-    dilated[:int(0.1 * height), :] = 0
-    dilated[-int(0.1 * height):, :] = 0
-    dilated[:, :int(0.1 * width)] = 0
-    dilated[:, -int(0.1 * width):] = 0
+    border_margin = int(0.1 * min(height, width))
+    dilated[:border_margin, :] = 0
+    dilated[-border_margin:, :] = 0
+    dilated[:, :border_margin] = 0
+    dilated[:, -border_margin:] = 0
 
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(dilated, connectivity=8)
 
@@ -61,7 +95,7 @@ def extract_and_normalize_largest_digit(image):
 
     for label in range(1, num_labels):
         x, y, w, h, area = stats[label]
-        if area < 80 or h > 0.9 * height:
+        if area < 0.0003 * (width * height) or h > 0.9 * height:
             continue
         cx, cy = centroids[label]
         dist2 = (cx - image_center[0]) ** 2 + (cy - image_center[1]) ** 2
@@ -72,12 +106,12 @@ def extract_and_normalize_largest_digit(image):
             best_label = label
 
     if best_label == -1:
-        print(f"[!] No valid digit found.")
+        print(f"No valid digit found.")
         return None
 
     selected = {best_label}
     queue = [best_label]
-    margin = 50
+    margin = int(0.06 * diag)
 
     while queue:
         label = queue.pop()
@@ -91,7 +125,7 @@ def extract_and_normalize_largest_digit(image):
             if other_label in selected:
                 continue
             ox, oy, ow, oh, oa = stats[other_label]
-            if oa < 50 or oh > 0.9 * height or ow > 0.9 * width:
+            if oa < 0.0004 * width * height or oh > 0.9 * height or ow > 0.9 * width:
                 continue
             if ox + ow < grow_x1 or ox > grow_x2 or oy + oh < grow_y1 or oy > grow_y2:
                 continue
@@ -100,15 +134,13 @@ def extract_and_normalize_largest_digit(image):
 
     selected_centroids = [centroids[i] for i in selected]
     for other_label in range(1, num_labels):
-        if other_label in selected:
-            continue
-        if stats[other_label][4] < 50:
+        if other_label in selected or stats[other_label][4] < 0.0002 * width * height:
             continue
         dist = torch.cdist(
-            torch.tensor(np.array([centroids[other_label]]), dtype=torch.float32),
-            torch.tensor(np.array(selected_centroids), dtype=torch.float32)
+            torch.tensor([centroids[other_label]], dtype=torch.float32),
+            torch.tensor(selected_centroids, dtype=torch.float32)
         )
-        if dist.min().item() < 80:
+        if dist.min().item() < 0.08 * diag:
             selected.add(other_label)
 
     merged_mask = np.zeros_like(dilated, dtype=np.uint8)
@@ -117,54 +149,98 @@ def extract_and_normalize_largest_digit(image):
 
     ys, xs = np.where(merged_mask)
     if len(xs) == 0 or len(ys) == 0:
-        print("[!] Empty merged digit.")
+        print("Empty merged digit.")
         return None
     x1, x2 = np.min(xs), np.max(xs)
     y1, y2 = np.min(ys), np.max(ys)
 
-    pad = 10
+    pad = max(5, int(0.03 * max(x2 - x1, y2 - y1)))
     x1 = max(x1 - pad, 0)
     y1 = max(y1 - pad, 0)
     x2 = min(x2 + pad, width)
     y2 = min(y2 + pad, height)
 
-    digit_crop = merged_mask[y1:y2 + 1, x1:x2 + 1]
-    h_new, w_new = digit_crop.shape
-    scale = 20.0 / max(h_new, w_new)
-    resized_digit = cv2.resize(digit_crop, (int(w_new * scale), int(h_new * scale)), interpolation=cv2.INTER_AREA)
-
-    canvas = np.zeros((28, 28), dtype=np.uint8)
-    rh, rw = resized_digit.shape
-    x_offset = (28 - rw) // 2
-    y_offset = (28 - rh) // 2
-    canvas[y_offset:y_offset + rh, x_offset:x_offset + rw] = resized_digit
-
-    digit_resized = canvas
+    gray_crop = gray[y1:y2 + 1, x1:x2 + 1].astype(np.float32)
+    gray_crop = 255.0 - gray_crop
+    gamma = 0.5
+    gray_crop = np.power(gray_crop / 255.0, gamma) * 255.0
+    gray_crop -= gray_crop.min()
+    if gray_crop.max() > 0:
+        gray_crop /= gray_crop.max()
+    else:
+        gray_crop[:] = 0.0
+    h_new, w_new = gray_crop.shape
+    if h_new > w_new:
+        diff = h_new - w_new
+        pad_left = diff // 2
+        pad_right = diff - pad_left
+        gray_crop = np.pad(gray_crop, ((0, 0), (pad_left, pad_right)), mode='constant')
+    elif w_new > h_new:
+        diff = w_new - h_new
+        pad_top = diff // 2
+        pad_bottom = diff - pad_top
+        gray_crop = np.pad(gray_crop, ((pad_top, pad_bottom), (0, 0)), mode='constant')
+    resized_digit = cv2.resize(gray_crop, (20, 20), interpolation=cv2.INTER_AREA)
+    canvas = np.zeros((28, 28), dtype=np.float32)
+    canvas[4:24, 4:24] = resized_digit
+    cy, cx = center_of_mass(canvas)
+    shift_y = int(np.round(14 - cy))
+    shift_x = int(np.round(14 - cx))
+    M = np.float32([[1, 0, shift_x], [0, 1, shift_y]])
+    canvas = cv2.warpAffine(canvas, M, (28, 28), flags=cv2.INTER_LINEAR, borderValue=0)
+    digit_resized = (canvas * 255).astype(np.uint8)
 
     return digit_resized
 
-def preprocess_for_ocr(img):
-    if len(img.shape) == 3 and img.shape[2] == 3:
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+def extract_cells_from_contours(contours_v, contours_h):
+    vertical_x = sorted([cv2.boundingRect(cnt)[0] for cnt in contours_v])
+    horizontal_y = sorted([cv2.boundingRect(cnt)[1] for cnt in contours_h])
+
+    cells = []
+    for i in range(len(horizontal_y) - 1):
+        for j in range(len(vertical_x) - 1):
+            x1 = vertical_x[j]
+            x2 = vertical_x[j + 1]
+            y1 = horizontal_y[i]
+            y2 = horizontal_y[i + 1]
+            cells.append((x1, y1, x2, y2))
+    return cells
+
+def enhance_faint_strokes(img):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    inverted = 255 - gray
+    gamma = 0.9
+    brightened = np.power(inverted / 255.0, gamma) * 255
+    brightened = np.clip(brightened, 0, 255).astype(np.uint8)
+    strokes_darkened = 255 - brightened
+
+    min_val = np.percentile(strokes_darkened, 2)
+    max_val = np.percentile(strokes_darkened, 98)
+    contrast_stretched = np.clip((strokes_darkened - min_val) * 255.0 / (max_val - min_val + 1e-5), 0, 255).astype(np.uint8)
+
+    return contrast_stretched
+
+def extract_badge_id(img, file_name):
+    _, buffer = cv2.imencode('.png', img)
+    content = buffer.tobytes()
+    image = vision.Image(content=content)
+    response = client.document_text_detection(image=image)
+    texts = response.full_text_annotation.text
+    digits_only = re.sub(r'\D', '', texts)
+    if not len(digits_only) == 6:
+        key = upload_badge_to_s3(img, file_name)
+        return digits_only, key
     else:
-        gray = img.copy()
-    blur = cv2.GaussianBlur(gray, (3, 3), 0)
-    _, threshed = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    return threshed
+        return digits_only, ""
 
 def deskew_image(image):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image.copy()
-    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=2)
-
-    edges = cv2.Canny(binary, 30, 150, apertureSize=3, L2gradient=True)
-
+    edges = cv2.Canny(gray, 30, 150, apertureSize=3, L2gradient=True)
     lines = []
-
     hough_lines = cv2.HoughLines(edges, 1, np.pi / 180, threshold=150)
     if hough_lines is not None:
         lines.extend(hough_lines[:, 0].tolist())
-
     houghp_lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=100,
                                    minLineLength=min(image.shape[1] // 4, 50),
                                    maxLineGap=10)
@@ -174,10 +250,8 @@ def deskew_image(image):
             dy = y2 - y1
             angle = np.arctan2(dy, dx)
             lines.append([0, angle])
-
     if not lines:
         return image
-
     angles = []
     for line in lines:
         if len(line) == 2:
@@ -188,171 +262,15 @@ def deskew_image(image):
 
         if -10 < angle < 10:
             angles.append(angle)
-
     if not angles:
         return image
-
     mean_angle = np.mean(angles)
-
     (h, w) = image.shape[:2]
     center = (w // 2, h // 2)
     M = cv2.getRotationMatrix2D(center, mean_angle, 1.0)
     deskewed = cv2.warpAffine(image, M, (w, h), flags=cv2.INTER_CUBIC,
                               borderMode=cv2.BORDER_REPLICATE)
-
     return deskewed
-
-def preprocess(image):
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (3, 3), 0)
-    _, binary = cv2.threshold(blur, 180, 255, cv2.THRESH_BINARY_INV)
-    return binary
-
-def split_roi_into_digit_boxes(image, expected_rows=5):
-
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.bilateralFilter(gray, 9, 75, 75)
-
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-    enhanced = clahe.apply(blurred)
-
-    binary = cv2.adaptiveThreshold(
-        enhanced, 255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY_INV,
-        blockSize=11,
-        C=2
-    )
-
-    contours, _ = cv2.findContours(binary.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    reg_rect = None
-    max_area = 0
-
-    for cnt in contours:
-        x, y, w, h = cv2.boundingRect(cnt)
-        area = w * h
-        if area > max_area and 2 < (w / h) < 10:
-            max_area = area
-            reg_rect = (x, y, w, h)
-
-    if reg_rect is None:
-        print("[!] Could not find REG box.")
-        return []
-
-    x, y, w, h = reg_rect
-    roi = image[y:y + h, x:x + w]
-
-
-    gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-    enhanced_roi = clahe.apply(gray_roi)
-
-    th = cv2.adaptiveThreshold(
-        enhanced_roi, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
-        cv2.THRESH_BINARY_INV, blockSize=15, C=10
-    )
-
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (30, 1))
-    morph = cv2.morphologyEx(th, cv2.MORPH_OPEN, kernel, iterations=1)
-
-    contours, _ = cv2.findContours(morph, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    underline_boxes = []
-    for cnt in contours:
-        ux, uy, uw, uh = cv2.boundingRect(cnt)
-        aspect = uw / uh if uh > 0 else 0
-        if 8 <= uw <= roi.shape[1] and 1 <= uh <= 6 and aspect > 10:
-            underline_boxes.append((ux, uy, uw, uh))
-
-    if len(underline_boxes) < expected_rows:
-        print(f"[!] Only found {len(underline_boxes)} underlines.")
-        return []
-
-    underline_boxes = sorted(underline_boxes, key=lambda b: b[1])[:expected_rows]
-    left_x = min(b[0] for b in underline_boxes)
-    left_x = min(b[0] for b in underline_boxes)
-    right_x = max(b[0] + b[2] for b in underline_boxes)
-
-    digit_boxes = []
-    output = roi.copy()
-
-    for i, (ux, uy, uw, uh) in enumerate(underline_boxes[:1]):
-        line_area = th[:uy, left_x:right_x]
-
-        long_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (40, 1))
-        long_line = cv2.morphologyEx(line_area, cv2.MORPH_OPEN, long_kernel, iterations=1)
-        top_contours, _ = cv2.findContours(long_line, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-        top_y = 0
-        if top_contours:
-            top_y = max([cv2.boundingRect(cnt)[1] + cv2.boundingRect(cnt)[3] for cnt in top_contours])
-
-        cropped_row = roi[top_y:uy, left_x:right_x]
-        row_gray = cv2.cvtColor(cropped_row, cv2.COLOR_BGR2GRAY)
-
-        _, row_binary = cv2.threshold(row_gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-
-        kernel_close = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
-        closed = cv2.morphologyEx(row_binary, cv2.MORPH_CLOSE, kernel_close)
-
-        kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-        cleaned = cv2.morphologyEx(closed, cv2.MORPH_OPEN, kernel_open)
-
-        digit_contours, _ = cv2.findContours(cleaned, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        digit_contours = sorted(digit_contours, key=lambda cnt: cv2.boundingRect(cnt)[0])
-
-        combined_contours = []
-        if digit_contours:
-            combined_contours = [digit_contours[0]]
-
-            for cnt in digit_contours[1:]:
-                x1, y1, w1, h1 = cv2.boundingRect(combined_contours[-1])
-                x2, y2, w2, h2 = cv2.boundingRect(cnt)
-
-                if x2 <= (x1 + w1 + 5):
-                    combined_x = min(x1, x2)
-                    combined_y = min(y1, y2)
-                    combined_w = max(x1 + w1, x2 + w2) - combined_x
-                    combined_h = max(y1 + h1, y2 + h2) - combined_y
-
-                    combined_contours[-1] = np.array([[
-                        [combined_x, combined_y],
-                        [combined_x + combined_w, combined_y],
-                        [combined_x + combined_w, combined_y + combined_h],
-                        [combined_x, combined_y + combined_h]
-                    ]])
-                else:
-                    combined_contours.append(cnt)
-
-        for j, dc in enumerate(combined_contours):
-            dx, dy, dw, dh = cv2.boundingRect(dc)
-            area = dw * dh
-            aspect = dh / dw if dw > 0 else 0
-
-            if dh > 10 and dw > 5 and area > 50:
-                padding = 5
-                pad_top = max(dy - padding, 0)
-                pad_bottom = min(dy + dh + padding, cropped_row.shape[0])
-                pad_left = max(dx - padding, 0)
-                pad_right = min(dx + dw + padding, cropped_row.shape[1])
-
-                digit = cropped_row[pad_top:pad_bottom, pad_left:pad_right]
-                digit_gray = cv2.cvtColor(digit, cv2.COLOR_BGR2GRAY)
-
-                digit_clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(4, 4))
-                digit_enhanced = digit_clahe.apply(digit_gray)
-
-                _, digit_binary = cv2.threshold(digit_enhanced, 0, 255,
-                                                cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-                digit_clean = cv2.erode(digit_binary,
-                                        cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)),
-                                        iterations=1)
-
-                digit_boxes.append(digit_clean)
-
-    print(f"[✓] Extracted {len(digit_boxes)} digits from REG box.")
-    return digit_boxes, roi
-
 
 def upload_badge_to_s3(image, file_name, object_prefix="low_confidence_badge"):
     s3 = boto3.client("s3")
@@ -396,149 +314,151 @@ def upload_vote_to_s3(image, file_name, object_prefix="low_confidence_vote"):
 
     print(f"[S3] Uploaded to s3://techbloom-ballots/{key}")
     return key
-#---------------------
-def process_badge_id(image, model, file_name):
-    transform = transforms.Compose([
-        transforms.ToPILImage(),
-        transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))
-    ])
 
-    h, w = image.shape[:2]
-    roi = image[0:int(h * 0.25), int(w * 0.65):w]
-    digit_boxes, extracted_img = split_roi_into_digit_boxes(roi)
+def detect_grid_lines(enhanced_gray, box, sidebar_thresh=0.6):
+    x, y, w, h = cv2.boundingRect(box)
+    roi = enhanced_gray[y:y+h, x:x+w]
+    _, binary = cv2.threshold(roi, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    vertical_profile = np.sum(binary, axis=0) / 255
+    norm_profile = cv2.GaussianBlur((vertical_profile / h).astype(np.float32), (15, 1), 0)
+    sidebar_check_span = max(3, min(20, int(0.01 * w)))
+    pre_sidebar_check_span = max(5, min(40, int(0.02 * w)))
+    left_sidebar_end = 0
+    for i in range(pre_sidebar_check_span + sidebar_check_span, w // 2):
+        before = norm_profile[i - sidebar_check_span - pre_sidebar_check_span: i - sidebar_check_span]
+        window = norm_profile[i - sidebar_check_span: i]
+        if np.mean(before) > sidebar_thresh and np.mean(window) < sidebar_thresh:
+            left_sidebar_end = i
+            break
+    right_sidebar_start = w
+    for i in range(w - pre_sidebar_check_span - sidebar_check_span, w // 2, -1):
+        before = norm_profile[i: i + pre_sidebar_check_span]
+        window = norm_profile[i - sidebar_check_span: i]
+        if np.mean(before) > sidebar_thresh and np.mean(window) < sidebar_thresh:
+            right_sidebar_start = i
+            break
+    binary[:, :left_sidebar_end] = 0
+    binary[:, right_sidebar_start:] = 0
+    text_filter_width = min(max(3, int(0.003 * w)), 20)
+    text_filter_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (text_filter_width, 1))
+    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, text_filter_kernel, iterations=1)
+    vertical_kernel_len = max(10, int(0.03 * h))
+    vertical_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, vertical_kernel_len))
+    vertical_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, vertical_kernel, iterations=2)
+    vertical_lines = cv2.dilate(vertical_lines, vertical_kernel, iterations=1)
+    horizontal_kernel_len = max(10, int(0.03 * w))
+    horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (horizontal_kernel_len, 1))
+    horizontal_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, horizontal_kernel, iterations=2)
+    horizontal_lines = cv2.dilate(horizontal_lines, horizontal_kernel, iterations=1)
+    contours_v, _ = cv2.findContours(vertical_lines, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours_h_all, _ = cv2.findContours(horizontal_lines, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    min_line_width_ratio = 0.5
+    max_line_thickness_ratio = 0.03
+    contours_h = []
+    for cnt in contours_h_all:
+        x_, y_, w_, h_ = cv2.boundingRect(cnt)
+        if (w_ >= min_line_width_ratio * w) and (h_ <= max_line_thickness_ratio * h):
+            contours_h.append(cnt)
+    contours_v = list(contours_v)
+    if 0 < right_sidebar_start < w:
+        synthetic_line = np.array([[[right_sidebar_start, 0]], [[right_sidebar_start, h - 1]]], dtype=np.int32)
+        contours_v.append(synthetic_line)
+    if 0 < left_sidebar_end < w:
+        synthetic_left = np.array([[[left_sidebar_end, 0]], [[left_sidebar_end, h-1]]], dtype=np.int32)
+        contours_v.append(synthetic_left)
+    roi_cluster_thresh = int(0.02 * w)
+    x_coords = [cv2.boundingRect(cnt)[0] for cnt in contours_v]
+    used = [False] * len(x_coords)
+    clusters = []
+    for i in range(len(x_coords)):
+        if used[i]:
+            continue
+        cluster = [i]
+        used[i] = True
+        for j in range(i + 1, len(x_coords)):
+            if not used[j] and abs(x_coords[j] - x_coords[i]) < roi_cluster_thresh:
+                cluster.append(j)
+                used[j] = True
+        clusters.append(cluster)
+    filtered_contours_v = []
+    for group in clusters:
+        best_idx = max(group, key=lambda idx: cv2.boundingRect(contours_v[idx])[3])  # tallest
+        filtered_contours_v.append(contours_v[best_idx])
+    contours_v = filtered_contours_v
+    cells = extract_cells_from_contours(contours_v, contours_h)
+    print(f"Detected vertical lines: {len(contours_v)}")
+    print(f"Detected horizontal lines: {len(contours_h)}")
+    return (contours_v, contours_h), (x, y), cells, roi
 
-    processed_digits = []
-    for digit_img in digit_boxes:
-        if len(digit_img.shape) == 3:
-            digit_img = cv2.cvtColor(digit_img, cv2.COLOR_BGR2GRAY)
-
-        _, digit_binary = cv2.threshold(digit_img, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-
-        orig_h, orig_w = digit_binary.shape
-        aspect_ratio = orig_w / float(orig_h)
-
-        centered = center_digit_proportional(digit_binary)
-
-        if orig_h > orig_w:
-            new_h = 24
-            new_w = max(4, int(new_h * aspect_ratio))
-        else:
-            new_w = 24
-            new_h = int(new_w / aspect_ratio)
-
-        resized = cv2.resize(centered, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
-
-        processed = np.zeros((28, 28), dtype=np.uint8)
-        start_x = (28 - new_w) // 2
-        start_y = (28 - new_h) // 2
-        processed[start_y:start_y + new_h, start_x:start_x + new_w] = resized
-
-        if aspect_ratio < 0.5:
-            kernel = np.ones((3, 1), np.uint8)
-            processed = cv2.dilate(processed, kernel, iterations=1)
-
-        processed_digits.append(processed)
-
-    input_batch = torch.stack([transform(d) for d in processed_digits])
-    with torch.no_grad():
-        output_batch = model(input_batch)
-        probs_batch = F.softmax(output_batch, dim=1).cpu().numpy()
-
-    digit_string = ""
-    low_confidence = False
-    for probs in probs_batch:
-        pred = np.argmax(probs)
-        confidence = probs[pred]
-        if confidence < 0.7:
-            digit_string += "?"
-            low_confidence = True
-        else:
-            digit_string += str(pred)
-
-    if low_confidence or not len(digit_string) == 5:
-        key = upload_badge_to_s3(extracted_img, file_name)
-        return digit_string, key
-    else:
-        return digit_string, ""
-#------------------------------------
-def center_digit_proportional(img):
-    pts = cv2.findNonZero(img)
-    if pts is None:
-        return img
-
-    x, y, w, h = cv2.boundingRect(pts)
-    digit_only = img[y:y + h, x:x + w]
-
-    padded = np.zeros((h + 4, w + 4), dtype=np.uint8)
-    padded[2:2 + h, 2:2 + w] = digit_only
-
-    return padded
-
-def detect_table_cells(image):
-    binary = preprocess(image)
-    horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (40, 1))
-    vertical_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 40))
-
-    detect_horizontal = cv2.morphologyEx(binary, cv2.MORPH_OPEN, horizontal_kernel, iterations=1)
-    detect_vertical = cv2.morphologyEx(binary, cv2.MORPH_OPEN, vertical_kernel, iterations=1)
-
-    grid = cv2.addWeighted(detect_horizontal, 0.5, detect_vertical, 0.5, 0.0)
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-    grid = cv2.dilate(grid, kernel, iterations=1)
-    contours, _ = cv2.findContours(grid, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
-    boxes = []
+def find_main_rectangles(img, file_name):
+    badge_id = ""
+    key = ""
+    badge_found = False
+    cropped_cells = []
+    enhanced = deskew_image(enhance_faint_strokes(img))
+    if enhanced is None:
+        return None, "", ""
+    original_img = enhanced.copy()
+    enhanced = cv2.convertScaleAbs(enhanced, alpha=1.1, beta=5)
+    blurred = cv2.GaussianBlur(enhanced, (1, 1), 0)
+    h, w = blurred.shape
+    block_size = max(15, ((min(h, w) // 100) | 1))
+    thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+                                   cv2.THRESH_BINARY, block_size, 7)
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+    morph = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=1)
+    contours, _ = cv2.findContours(255 - morph, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    img_area = h * w
+    candidates = []
     for cnt in contours:
-        x, y, w, h = cv2.boundingRect(cnt)
-        if 40 < w < 800 and 20 < h < 100:
-            boxes.append((x, y, w, h))
+        area = cv2.contourArea(cnt)
+        if area < 0.01 * img_area or area > 0.95 * img_area:
+            continue
+        rect = cv2.minAreaRect(cnt)
+        box = cv2.boxPoints(rect)
+        box = np.intp(box)
+        w_box = np.linalg.norm(box[0] - box[1])
+        h_box = np.linalg.norm(box[1] - box[2])
+        aspect_ratio = max(w_box, h_box) / (min(w_box, h_box) + 1e-5)
+        if aspect_ratio > 10 or aspect_ratio < 0.1:
+            continue
+        candidates.append((area, box))
+    print(len(candidates))
+    candidates.sort(key=lambda x: -x[0])
+    top_2 = candidates[:3]
+    output = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
+    for idx, (_, box) in enumerate(top_2):
+        cv2.drawContours(output, [box], 0, (0, 0, 255), 2)
+        if idx >= 2:
+            x, y, w, h = cv2.boundingRect(box)
+            third_roi = original_img[y:y + h, x:x + w]
+            badge_id, key = extract_badge_id(third_roi, file_name)
+            badge_found = True
+            continue
+        (contours_v, contours_h), (x, y), cells, roi = detect_grid_lines(enhanced, box)
+        print(f"Number of detected cells: {len(cells)}")
+        for c in contours_v:
+            c_offset = c + np.array([[x, y]])
+            cv2.drawContours(output, [c_offset], -1, (0, 255, 0), thickness=3)
+        for c in contours_h:
+            c_offset = c + np.array([[x, y]])
+            cv2.drawContours(output, [c_offset], -1, (255, 0, 0), thickness=3)
+        cell_add_count = 0
+        for cell_idx, (x1, y1, x2, y2) in enumerate(cells):
+            pt1 = (x + x1, y + y1)
+            pt2 = (x + x2, y + y2)
+            cv2.rectangle(output, pt1, pt2, (255, 255, 0), 1)
+            if cell_idx % 3 == 2:
+                if cell_add_count == 0:
+                    cell_add_count += 1
+                    continue
+                cell_img = roi[y1:y2, x1:x2]
+                cropped_cells.append(cell_img)
+                cell_add_count += 1
+    if not badge_found:
+        raise ValueError(f"[find_main_rectangles] Could not find third box to extract badge ID from: {file_name}")
+    return cropped_cells, badge_id, key
 
-    boxes = sorted(boxes, key=lambda b: (b[1], b[0]))
-
-    return boxes
-
-def split_tables_by_x_gap(boxes):
-    xs = sorted([x for x, y, w, h in boxes])
-    gaps = [(xs[i+1] - xs[i], xs[i], xs[i+1]) for i in range(len(xs)-1)]
-    max_gap, left_edge, right_edge = max(gaps, key=lambda g: g[0])
-    split_x = left_edge + max_gap//2
-    left = [b for b in boxes if b[0] < split_x]
-    right = [b for b in boxes if b[0] >= split_x]
-    return left, right
-
-def group_cells_by_rows(boxes, y_thresh=10):
-    boxes = sorted(boxes, key=lambda b: (b[1], b[0]))
-    rows = []
-
-    for box in boxes:
-        x, y, w, h = box
-        placed = False
-
-        for row in rows:
-            ry = row[0][1]
-            if abs(y - ry) < y_thresh:
-                row.append(box)
-                placed = True
-                break
-
-        if not placed:
-            rows.append([box])
-
-    for row in rows:
-        row.sort(key=lambda b: b[0])
-
-    return rows
-
-def filter_valid_boxes(boxes, min_y=100):
-    return [box for box in boxes if box[1] > min_y]
-
-def preprocess_cell(cell_img):
-    gray = cv2.cvtColor(cell_img, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    resized = cv2.resize(thresh, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
-    return resized
-#-------------------------
 def extract_digits(cell_img, file_name):
     h, w = cell_img.shape[:2]
     segment_width = w // 3
@@ -551,10 +471,17 @@ def extract_digits(cell_img, file_name):
 
         norm_digit = extract_and_normalize_largest_digit(digit_img)
         print(f"Segment {i} norm_digit is None: {norm_digit is None}")
+        if norm_digit is None:
+            digits.append('?')
+            continue
         if norm_digit is not None:
 
             if isinstance(norm_digit, np.ndarray):
                 norm_digit = transforms.ToPILImage()(norm_digit)
+            elif not isinstance(norm_digit, Image.Image):
+                print("Unexpected digit type:", type(norm_digit))
+                digits.append('?')
+                continue
 
             input_tensor = transform(norm_digit).unsqueeze(0)
 
@@ -579,148 +506,66 @@ def extract_digits(cell_img, file_name):
             digits.append('?')
     final = ''.join(digits)
     print(f"Full 3-digit result: {final}")
-    key = ""
-    if not len(final) == 3:
-        good_vote = False
-    if not good_vote:
-        key = upload_vote_to_s3(cell_img, file_name)
-    return final, key
+    return final
 
-#new func i added 
-def split_vote_cell_into_digits(cell_img):
-    gray = cv2.cvtColor(cell_img, cv2.COLOR_BGR2GRAY) if len(cell_img.shape) == 3 else cell_img
-    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-
-    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    digit_boxes = []
-    for cnt in contours:
-        x, y, w, h = cv2.boundingRect(cnt)
-        if h > 10 and w > 3: 
-            digit_boxes.append((x, y, w, h))
-
-    digit_boxes = sorted(digit_boxes, key=lambda b: b[0]) 
-
-    digits = []
-    for (x, y, w, h) in digit_boxes:
-        digit = binary[y:y+h, x:x+w]
-        digits.append(digit)
-
-    return digits, cell_img
-
-#-----------------------  
-def extract_text_from_cells(image, rows, count, file_name):
+def extract_text_from_cells(image, file_name):
     extracted = []
+    item_numbers = []
     CATEGORY_IDS = [
-        "A", "B", "C", "D", "E", "G", "H", "I", "J", "F",
-        "FA", "FB", "FC", "FD", "FE", "FF", "FG", "FH",
-        "K", "KA", "KB", "KC", "L", "M", "N", "O", "P", "PA",
-        "Q", "QA", "R", "RA", "S", "T", "U", "V", "W",
-        "WA", "X", "Y", "YA"
+        "K", "KA", "KB", "KC", "L", "M", "N", "O", "P",
+        "PA", "Q", "QA", "R", "RA", "S", "T", "U", "V",
+        "W", "WA", "X", "Y", "YA", "A", "B", "C", "D",
+        "E", "G", "H", "I", "J", "F", "FA", "FB", "FC",
+        "FD", "FE", "FF", "FG", "FH"
     ]
+    cropped_cells, badge_id, key = find_main_rectangles(image, file_name)
+    if cropped_cells is not None:
+        for i, cell_img in enumerate(cropped_cells):
+            current = extract_digits(cell_img, file_name)
+            cat_id = CATEGORY_IDS[i]
+            item_numbers.append(current)
+            if len(current) == 3 and "?" not in current:
+                key = ""
+                print(f"Processing cell {current} and {cat_id}, valid vote: {current}")
+                extracted.append({
+                    'Category ID': cat_id,
+                    'Item Number': current,
+                    'Status': 'readable',
+                    'Key': key
+                })
+            else:
+                key = upload_vote_to_s3(cell_img, file_name, cat_id)
+                print(f"Invalid vote cell {current} and {cat_id}, uploading to S3: {current}")
+                extracted.append({
+                    'Category ID': cat_id,
+                    'Item Number': current,
+                    'Status': 'unreadable',
+                    'Key': key
+                })
+    return extracted, badge_id, key
 
-    for row in rows:
-        row = sorted(row, key=lambda b: b[0])
-        cells = []
-        key = ""
-        for i, (x, y, w, h) in enumerate(row):
-            cell_img = image[y:y + h, x:x + w]
-            if i == 2:
-                processed = preprocess_cell(cell_img)
-                item_number, _ = extract_digits(processed, file_name)
-                cells.append(item_number)
-
-        cat_id = CATEGORY_IDS[count]
-        item_no = cells[0] if len(cells) > 0 else ''
-        count += 1
-
-        if len(item_no) == 3 and "?" not in item_no:
-            key = ""
-            print(f"[DEBUG] Processing row {count}, valid vote: {item_no}")
-            extracted.append({
-                'Category ID': cat_id,
-                'Item Number': item_no,
-                'Status': 'readable',
-                'Key': key
-            })
-        else:
-            key = upload_vote_to_s3(cell_img, file_name, cat_id)
-            print(f"[DEBUG] Invalid vote in row {count}, uploading to S3: {item_no}")
-            extracted.append({
-                'Category ID': cat_id,
-                'Item Number': item_no,
-                'Status': 'unreadable',
-                'Key': key
-            })
-
-    return extracted
-#------------------
-def badge_id_exists(session_id: str, badge_id: str) -> bool:
-    session = get_db_session()
-    try:
-        exists = session.query(ValidBadgeIDs).filter(
-            ValidBadgeIDs.session_id == session_id,
-            ValidBadgeIDs.badge_id == badge_id
-        ).first() is not None
-    finally:
-        session.close()
-    return exists
-
-def readable_badge_id_exists(session_id: str, badge_id: str) -> bool:
-    session = get_db_session()
-    try:
-        exists = session.query(Ballot).filter(
-            Ballot.session_id == session_id,
-            Ballot.badge_id == badge_id,
-            Ballot.badge_status == 'readable'
-        ).first() is not None
-    finally:
-        session.close()
-    return exists
-#----------------------  changed this to upload tos3 only if low cofidence(?)
 def process_image(image_bytes, file_name, session_id: str):
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     image_np = np.array(image)
     image_cv = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
 
-    image_cv = deskew_image(image_cv)
-
-    badge_id, key = process_badge_id(image_cv, model, file_name)
+    item_extract, badge_id, key = extract_text_from_cells(image_cv, file_name)
     validity = True
+    if key == "" and (badge_id_exists(session_id, badge_id) and not readable_badge_id_exists(session_id, badge_id)):
+        insert_badge(session_id, badge_id, 'readable', key, file_name, validity)
+    elif key == "" and ((not badge_id_exists(session_id, badge_id)) or readable_badge_id_exists(session_id, badge_id)):
+        validity = False
+        insert_badge(session_id, badge_id, 'readable', key, file_name, validity)
+    else:
+        insert_badge(session_id, badge_id, 'unreadable', key, file_name, validity)
 
+    print(f"Extracted Badge ID: {badge_id}")
+    for item in item_extract:
+        category_id = item['Category ID']
+        vote = item['Item Number']
+        status = item['Status']
+        key = item['Key']
+        insert_vote(badge_id, file_name, category_id, vote, status, validity, key)
 
-    if key != "":
-        ballot_key = upload_badge_to_s3(image_cv, file_name, object_prefix="problematic_ballots")
-        print(f"[S3] Uploaded full ballot due to badge ID issue: {ballot_key}")
-
-  
-    boxes = detect_table_cells(image_cv)
-    boxes = filter_valid_boxes(boxes, min_y=450)
-    left_boxes, right_boxes = split_tables_by_x_gap(boxes)
-    left_rows = group_cells_by_rows(left_boxes)
-    right_rows = group_cells_by_rows(right_boxes)
-    tables = [left_rows, right_rows]
-
-    all_extracted = []
-    count = 0
-    for table_idx, rows in enumerate(tables):
-        if table_idx == 0:
-            rows = rows[1:]  
-        extracted_cells = extract_text_from_cells(image_cv, rows, count, file_name)
-        for item in extracted_cells:
-            category_id = item['Category ID']
-            vote = item['Item Number']
-            status = item['Status']
-            key = item['Key']
-
-            
-            all_extracted.append({
-                'category_id': category_id,
-                'vote': vote,
-                'status': status,
-                'key': key
-            })
-        count += len(rows)
-
-    print(f"[process_image] Extracted {len(all_extracted)} votes from {file_name}")
-    return badge_id, all_extracted
+    print(f"[process_image] Extracted {len(item_extract)} votes from {file_name}")
+    return badge_id, item_extract
