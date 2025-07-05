@@ -412,6 +412,7 @@ def find_main_rectangles(img, file_name):
     contours, _ = cv2.findContours(255 - morph, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     img_area = h * w
     candidates = []
+    cell_add_count = 0
     for cnt in contours:
         area = cv2.contourArea(cnt)
         if area < 0.01 * img_area or area > 0.95 * img_area:
@@ -428,14 +429,15 @@ def find_main_rectangles(img, file_name):
     print(len(candidates))
     candidates.sort(key=lambda x: -x[0])
     top_2 = candidates[:3]
+    if not len(top_2) == 3:
+        raise ValueError(f"Could not find third box to extract badge ID from: {file_name}")
     output = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
-    for idx, (_, box) in enumerate(top_2):
+    for idx, (_, box) in enumerate(reversed(top_2)):
         cv2.drawContours(output, [box], 0, (0, 0, 255), 2)
-        if idx >= 2:
+        if idx == 0:
             x, y, w, h = cv2.boundingRect(box)
             third_roi = original_img[y:y + h, x:x + w]
             badge_id, key = extract_badge_id(third_roi, file_name)
-            badge_found = True
             continue
         (contours_v, contours_h), (x, y), cells, roi = detect_grid_lines(enhanced, box)
         print(f"Number of detected cells: {len(cells)}")
@@ -445,7 +447,6 @@ def find_main_rectangles(img, file_name):
         for c in contours_h:
             c_offset = c + np.array([[x, y]])
             cv2.drawContours(output, [c_offset], -1, (255, 0, 0), thickness=3)
-        cell_add_count = 0
         for cell_idx, (x1, y1, x2, y2) in enumerate(cells):
             pt1 = (x + x1, y + y1)
             pt2 = (x + x2, y + y2)
@@ -457,8 +458,6 @@ def find_main_rectangles(img, file_name):
                 cell_img = roi[y1:y2, x1:x2]
                 cropped_cells.append(cell_img)
                 cell_add_count += 1
-    if not badge_found:
-        raise ValueError(f"[find_main_rectangles] Could not find third box to extract badge ID from: {file_name}")
     return cropped_cells, badge_id, key
 
 def extract_digits(cell_img, file_name):
@@ -514,11 +513,11 @@ def extract_text_from_cells(image, file_name):
     extracted = []
     item_numbers = []
     CATEGORY_IDS = [
+        "A", "B", "C", "D", "E", "G", "H", "I", "J", "F",
+        "FA", "FB", "FC", "FD", "FE", "FF", "FG", "FH",
         "K", "KA", "KB", "KC", "L", "M", "N", "O", "P",
         "PA", "Q", "QA", "R", "RA", "S", "T", "U", "V",
-        "W", "WA", "X", "Y", "YA", "A", "B", "C", "D",
-        "E", "G", "H", "I", "J", "F", "FA", "FB", "FC",
-        "FD", "FE", "FF", "FG", "FH"
+        "W", "WA", "X", "Y", "YA"
     ]
     cropped_cells, badge_id, key = find_main_rectangles(image, file_name)
     if cropped_cells is not None:
