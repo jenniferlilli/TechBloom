@@ -239,20 +239,6 @@ def dashboard():
 
     db_session = get_db_session()
 
-    print(f"Flask session_id: {session_id} ({type(session_id)})")
-    session_uuid = UUID(session_id)
-    print(f"Converted session_uuid: {session_uuid} ({type(session_uuid)})")
-
-    ballots = db_session.query(Ballot).filter_by(session_id=session_uuid).all()
-    print(f"Ballots for session_uuid: {len(ballots)}")
-    for b in ballots:
-        print(f"Ballot ID: {b.id}, name: {b.name}")
-
-    print(f"[dashboard] Dashboard session UUID: {session_uuid}")
-    ballot_ids = [b.id for b in ballots]
-    all_votes = db_session.query(BallotVotes).filter(BallotVotes.ballot_id.in_(ballot_ids)).all()
-    print(f"Total votes found by ballot IDs: {len(all_votes)}")
-
     vote_records = (
         db_session.query(BallotVotes)
         .join(Ballot, BallotVotes.ballot_id == Ballot.id)

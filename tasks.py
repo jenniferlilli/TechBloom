@@ -20,50 +20,73 @@ s3_client = boto3.client('s3')
 def preprocess_zip_task(self, zip_path, session_id):
     db_session = get_db_session()
     processed_count = 0
+    session_uuid = uuid.UUID(session_id)
 
     try:
         with zipfile.ZipFile(zip_path, 'r') as archive:
             for file_info in archive.infolist():
-                if file_info.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-                    print(f"Processing image: {file_info.filename}")
+                if not file_info.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+                    continue
 
-                    with archive.open(file_info) as image_file:
-                        image_data = image_file.read()
+                print(f"Processing image: {file_info.filename}")
+                with archive.open(file_info) as image_file:
+                    image_data = image_file.read()
 
-                    result = process_image(image_data, file_info.filename)
-                    badge_id = result['badge_id']
-                    badge_key = result['badge_key']
-                    ocr_result = result['items']
+                result = process_image(image_data, file_info.filename)
+                badge_id = result['badge_id']
+                badge_key = result['badge_key']
+                ocr_result = result['items']
+
+                if badge_key == "" and (badge_id_exists(session_id, badge_id) and not readable_badge_id_exists(session_id, badge_id)):
                     validity = True
-                    if badge_key == "" and (badge_id_exists(session_id, badge_id) and not readable_badge_id_exists(session_id, badge_id)):
-                        insert_badge(session_id, badge_id, 'readable', badge_key, file_info.filename, validity)
-                    elif badge_key == "" and ((not badge_id_exists(session_id, badge_id)) or readable_badge_id_exists(session_id, badge_id)):
-                        validity = False
-                        insert_badge(session_id, badge_id, 'readable', badge_key, file_info.filename, validity)
-                    else:
-                        insert_badge(session_id, badge_id, 'unreadable', badge_key, file_info.filename, validity)
+                    badge_status = 'readable'
+                elif badge_key == "" and ((not badge_id_exists(session_id, badge_id)) or readable_badge_id_exists(session_id, badge_id)):
+                    validity = False
+                    badge_status = 'readable'
+                else:
+                    validity = True
+                    badge_status = 'unreadable'
 
-                    for item in ocr_result:
-                        category_id = item['Category ID']
-                        vote = item['Item Number']
-                        status = item['Status']
-                        key = item['Key']
-                        insert_vote(badge_id, file_info.filename, category_id, vote, status, validity, key, session_id)
+                ballot = Ballot(
+                    session_id=session_uuid,
+                    badge_id=badge_id,
+                    badge_status=badge_status,
+                    s3_key=badge_key,
+                    name=file_info.filename,
+                    validity=validity
+                )
+                db_session.add(ballot)
+                db_session.flush()
 
-                    db_session.add(OCRResult(
-                        session_id=session_id,
-                        filename=file_info.filename,
-                        extracted_text=json.dumps(ocr_result)
+                vote_objects = []
+                for item in ocr_result:
+                    vote_objects.append(BallotVotes(
+                        badge_id=badge_id,
+                        ballot_id=ballot.id,  # Use freshly created ballot.id
+                        name=file_info.filename,
+                        category_id=item['Category ID'],
+                        vote=item['Item Number'],
+                        vote_status=item['Status'],
+                        is_valid=validity,
+                        key=item['Key']
                     ))
 
+                db_session.add_all(vote_objects)
 
-                    db_session.commit()
+                db_session.add(OCRResult(
+                    session_id=session_uuid,
+                    filename=file_info.filename,
+                    extracted_text=json.dumps(ocr_result)
+                ))
 
-                    processed_count += 1
+                db_session.commit()
+
+                processed_count += 1
 
         return {'status': 'completed', 'processed_count': processed_count}
 
     except Exception as e:
+        db_session.rollback()
         print(f"Error processing ZIP file: {e}")
         return {'status': 'failed', 'error': str(e)}
 

@@ -67,7 +67,6 @@ if not DATABASE_URL:
 print(f"Connecting to database at: {DATABASE_URL}")
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
-Base.metadata.drop_all(engine)
 Base.metadata.create_all(engine)
 
 SessionLocal = scoped_session(sessionmaker(bind=engine))
