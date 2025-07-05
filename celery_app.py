@@ -1,4 +1,6 @@
 from celery import Celery
+from db_model import DATABASE_URL
+print(f"[Celery Worker] Using DATABASE_URL: {DATABASE_URL}")
 
 def make_celery(app_name=__name__):
     celery = Celery(

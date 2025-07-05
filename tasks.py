@@ -37,16 +37,6 @@ def preprocess_zip_task(self, zip_path, session_id):
                     print("Badge ID returned:", badge_id)
                     print("OCR raw result:", ocr_result)
 
-                    session_uuid = uuid.UUID(session_id)
-                    new_ballot = Ballot(
-                        session_id=session_uuid,
-                        name=file_info.filename,
-                        badge_status="readable" if badge_id else "unreadable",
-                        validity=True,
-                        badge_id=badge_id
-                    )
-                    db_session.add(new_ballot)
-                    db_session.commit()
 
                     db_session.add(OCRResult(
                         session_id=session_id,

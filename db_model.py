@@ -64,6 +64,7 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL not defined in .env file")
 
+print(f"Connecting to database at: {DATABASE_URL}")
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
 Base.metadata.create_all(engine)

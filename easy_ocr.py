@@ -43,6 +43,7 @@ transform = transforms.Compose([
 def badge_id_exists(session_id: str, badge_id: str) -> bool:
     session = get_db_session()
     try:
+        session_id = uuid.UUID(session_id)
         exists = session.query(ValidBadgeIDs).filter(
             ValidBadgeIDs.session_id == session_id,
             ValidBadgeIDs.badge_id == badge_id
@@ -54,6 +55,7 @@ def badge_id_exists(session_id: str, badge_id: str) -> bool:
 def readable_badge_id_exists(session_id: str, badge_id: str) -> bool:
     session = get_db_session()
     try:
+        session_id = uuid.UUID(session_id)
         exists = session.query(Ballot).filter(
             Ballot.session_id == session_id,
             Ballot.badge_id == badge_id,
@@ -565,7 +567,7 @@ def process_image(image_bytes, file_name, session_id: str):
         vote = item['Item Number']
         status = item['Status']
         key = item['Key']
-        insert_vote(badge_id, file_name, category_id, vote, status, validity, key)
+        insert_vote(badge_id, file_name, category_id, vote, status, validity, key, session_id)
 
     print(f"[process_image] Extracted {len(item_extract)} votes from {file_name}")
     return badge_id, item_extract
