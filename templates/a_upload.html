@@ -406,7 +406,11 @@
   </div>
 
   <img src="{{ url_for('static', filename='light_logo.png') }}" id="bottom-logo" alt="Logo" />
-  <div id="session-id-box">Session ID: <span id="session-id-text">{{ session_id }}</span></div>
+  <div id="session-id-box" onclick="copySessionId()" style="cursor: pointer;">
+  Session ID: <span id="session-id-text">{{ short_session_id }}</span>
+  <span style="font-size: 0.8em; color: #888;">(click to copy full ID)</span>
+  </div>
+
 
   <script>
     let badgeFile = null;
@@ -562,5 +566,19 @@
     }
   }, 3000);
   </script>
+<script>
+  function copySessionId() {
+    const fullId = "{{ session_id }}";
+    navigator.clipboard.writeText(fullId)
+      .then(() => {
+        alert("Full session ID copied to clipboard!");
+      })
+      .catch(err => {
+        console.error('Failed to copy:', err);
+        alert("Failed to copy session ID");
+      });
+  }
+</script>
+
 </body>
 </html>

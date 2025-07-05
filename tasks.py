@@ -2,8 +2,9 @@ import zipfile
 import os
 from io import BytesIO
 from celery import Celery
-from easy_ocr import process_image 
+from easy_ocr import process_image, readable_badge_id_exists, badge_id_exists
 from db_model import get_db_session, Ballot, OCRResult, BallotVotes
+from db_utils import insert_vote, insert_badge
 import boto3
 import json
 import uuid
@@ -29,14 +30,25 @@ def preprocess_zip_task(self, zip_path, session_id):
                     with archive.open(file_info) as image_file:
                         image_data = image_file.read()
 
-                    image_key = f"{session_id}/ballots/{file_info.filename}"
-                    s3_client.upload_fileobj(BytesIO(image_data), bucket_name, image_key)
+                    result = process_image(image_data, file_info.filename)
+                    badge_id = result['badge_id']
+                    badge_key = result['badge_key']
+                    ocr_result = result['items']
+                    validity = True
+                    if badge_key == "" and (badge_id_exists(session_id, badge_id) and not readable_badge_id_exists(session_id, badge_id)):
+                        insert_badge(session_id, badge_id, 'readable', badge_key, file_info.filename, validity)
+                    elif badge_key == "" and ((not badge_id_exists(session_id, badge_id)) or readable_badge_id_exists(session_id, badge_id)):
+                        validity = False
+                        insert_badge(session_id, badge_id, 'readable', badge_key, file_info.filename, validity)
+                    else:
+                        insert_badge(session_id, badge_id, 'unreadable', badge_key, file_info.filename, validity)
 
-                   
-                    badge_id, ocr_result = process_image(image_data, file_info.filename, session_id)
-                    print("Badge ID returned:", badge_id)
-                    print("OCR raw result:", ocr_result)
-
+                    for item in ocr_result:
+                        category_id = item['Category ID']
+                        vote = item['Item Number']
+                        status = item['Status']
+                        key = item['Key']
+                        insert_vote(badge_id, file_info.filename, category_id, vote, status, validity, key, session_id)
 
                     db_session.add(OCRResult(
                         session_id=session_id,

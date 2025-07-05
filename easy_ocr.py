@@ -545,28 +545,18 @@ def extract_text_from_cells(image, file_name):
                 })
     return extracted, badge_id, key
 
-def process_image(image_bytes, file_name, session_id: str):
+def process_image(image_bytes, file_name):
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     image_np = np.array(image)
     image_cv = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
 
     item_extract, badge_id, key = extract_text_from_cells(image_cv, file_name)
-    validity = True
-    if key == "" and (badge_id_exists(session_id, badge_id) and not readable_badge_id_exists(session_id, badge_id)):
-        insert_badge(session_id, badge_id, 'readable', key, file_name, validity)
-    elif key == "" and ((not badge_id_exists(session_id, badge_id)) or readable_badge_id_exists(session_id, badge_id)):
-        validity = False
-        insert_badge(session_id, badge_id, 'readable', key, file_name, validity)
-    else:
-        insert_badge(session_id, badge_id, 'unreadable', key, file_name, validity)
 
     print(f"Extracted Badge ID: {badge_id}")
-    for item in item_extract:
-        category_id = item['Category ID']
-        vote = item['Item Number']
-        status = item['Status']
-        key = item['Key']
-        insert_vote(badge_id, file_name, category_id, vote, status, validity, key, session_id)
 
     print(f"[process_image] Extracted {len(item_extract)} votes from {file_name}")
-    return badge_id, item_extract
+    return {
+        "badge_id" : badge_id,
+        "badge_key" : key,
+        "items" : item_extract
+    }

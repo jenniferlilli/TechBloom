@@ -111,7 +111,7 @@ def create_session():
 @app.route('/join-session', methods=['GET', 'POST'])
 def join_session():
     if request.method == 'POST':
-        session_id = request.form.get('session_id')
+        session_id = UUID(request.form.get('session_id'))
         password = request.form.get('password')
         db_session = get_db_session()
         user_session = db_session.query(UserSession).filter_by(
@@ -297,7 +297,7 @@ def review_dashboard():
 
     ballots_with_badge_issues = (
         db_session.query(Ballot)
-        .filter(Ballot.session_id == session_uuid, Ballot.badge_status == 'unreadable')
+        .filter(Ballot.session_id == session_uuid, Ballot.badge_status == 'unreadable', Ballot.validity == True)
         .all()
     )
     
@@ -325,6 +325,7 @@ def review_dashboard():
         .filter(
             Ballot.session_id == session_uuid,
             BallotVotes.vote_status == "unreadable",
+            BallotVotes.is_valid == True
         )
         .all()
     )
@@ -344,13 +345,11 @@ def review_dashboard():
             'vote_id': vote.id,
             'category': vote.category_id,
             'current_vote': vote.vote,
-            'badge_id': vote.ballot.badge_id,
+            'badge_id': vote.badge_id,
             's3_url': s3_url,
-            'name': vote.ballot.name
+            'name': vote.name
         })
     print(votes_data)
-    print("Session ID from session:", session_id, type(session_id))
-    print("Converted session UUID:", session_uuid, type(session_uuid))
 
     print("Session ID:", session_id)
     print("Bad ballots found:", len(badges_data))
@@ -362,6 +361,7 @@ def review_dashboard():
 @app.route('/fix_vote', methods=['POST'])
 def fix_vote():
     session_id = session.get('session_id')
+    session_id = uuid.UUID(session_id)
     vote_id = request.form.get('vote_id')
     new_vote = request.form.get('vote', '').strip()
 
@@ -404,6 +404,7 @@ def fix_vote():
 @app.route('/fix_badge', methods=['POST'])
 def fix_badge():
     session_id = session.get('session_id')
+    session_id = uuid.UUID(session_id)
     id = int(request.form['id'])
     print(id)
     new_badge = request.form['badge_id'].strip()
@@ -433,13 +434,6 @@ def fix_badge():
         flash('Badge ID does not exist.')
         db_session.close()
         return redirect(request.referrer)
-
-    ballot.badge_id = new_badge
-    print(f"Before update: badge_status = {ballot.badge_status}")
-    ballot.badge_status = 'readable'  
-    print(f"After update: badge_status = {ballot.badge_status}")
-    ballot.validity = is_valid
-    ballot.s3_key = ""
     try:
         ballot = db_session.query(Ballot).filter_by(id=id).one()
         ballot.badge_status = 'readable'
@@ -473,6 +467,7 @@ def fix_badge():
 @app.route('/delete_vote/<int:vote_id>')
 def delete_vote(vote_id):
     session_id = session.get('session_id')
+    session_id = uuid.UUID(session_id)
     db_session = get_db_session()
     vote = (
         db_session.query(BallotVotes)
@@ -500,6 +495,7 @@ def delete_vote(vote_id):
 @app.route('/delete_ballot/<int:id>')
 def delete_ballot(id):
     session_id = session.get('session_id')
+    session_id = uuid.UUID(session_id)
     db_session = get_db_session()
     ballot = (
         db_session.query(Ballot)
