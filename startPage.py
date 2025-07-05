@@ -332,7 +332,7 @@ def review_dashboard():
 
     votes_data = []
     for vote in votes_with_errors:
-        print("Vote:", vote.id, "ballot_id:", vote.ballot_id, "badge_id:", vote.badge_id, "linked badge_id from Ballot:", vote.ballot.badge_id)
+        print("Vote:", vote.id, "ballot_id:", vote.ballot_id, "badge_id:", vote.badge_id)
         s3_url = None
         if vote.key:
             s3_url = s3.generate_presigned_url(
