@@ -3,7 +3,8 @@ import boto3
 import json
 import re
 from uuid import uuid4
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_file
+from markupsafe import Markup
 from flask_cors import CORS
 from sqlalchemy import func, desc
 from werkzeug.utils import secure_filename
@@ -19,11 +20,13 @@ from db_model import (
 from db_utils import validate_user_session, insert_user_session, insert_products
 from easy_ocr import process_image, badge_id_exists, readable_badge_id_exists
 from io import BytesIO
+from openpyxl import Workbook
 import zipfile
 from botocore.exceptions import NoCredentialsError, ClientError
 from collections import defaultdict, Counter
 from openpyxl import load_workbook
-
+import gspread
+from google.oauth2.service_account import Credentials
 
 import random
 
@@ -201,48 +204,56 @@ def upload_files():
                 db_session.close()
                 return redirect(request.url)
 
-        # process excel into list
+        #process excel into list
         if excelFile and allowed_file(excelFile.filename, {'xlsx'}):
             try:
+                from openpyxl import load_workbook
+
                 workbook = load_workbook(excelFile, data_only=True)
                 sheet = workbook.active
 
-                product_data = {}
-                product_list = []
+                product_data = {}  
 
                 for row in sheet.iter_rows(min_row=2, values_only=True):  
                     if len(row) < 3:
                         continue
 
-                    product_name = str(row[0]).strip()
-                    category_id = str(row[1]).strip().upper()
-                    product_number = str(row[2]).strip()
+                    product_name = row[0]
+                    category_id = row[1]
+                    product_number = row[2]
 
                     if not all([product_name, category_id, product_number]):
                         continue
 
-                    # update session cache
+                    category_id = str(category_id).strip().upper()
+                    product_number = str(product_number).strip()
+                    product_name = str(product_name).strip()
+
                     if category_id not in product_data:
                         product_data[category_id] = {}
+
                     product_data[category_id][product_number] = product_name
-
-                    # prepare for DB insert
-                    product_list.append((category_id, product_number, product_name))
-
-                # save to session + DB
+                
                 session['product_data'] = product_data
-                insert_products(session_id, product_list)
-
                 print("Parsed Product Data:", product_data)
-                flash('Excel file processed and stored successfully.')
 
+                flash('Excel file processed successfully.')
+                '''
+                filename = secure_filename(excelFile.filename)
+                key = f'{session_id}/{filename}'
+                upload_to_s3(BytesIO(excelFile.read()), bucket_name, key)
+                flash('Excel file uploaded.')
+                '''
             except Exception as e:
                 flash('Excel file processing failed.')
                 print(f"Excel processing error: {e}")
+
         db_session.close()
         return redirect(url_for('dashboard'))
 
     return render_template('templates/a_upload.html', joined_existing=joined_existing)
+
+
 
 @app.route('/dashboard')
 def dashboard():
@@ -251,9 +262,22 @@ def dashboard():
         flash('Please log in or create a session first.')
         return redirect(url_for('login'))
 
+    top3_per_category = get_top3_votes_by_category(session_id)
+
+    total_votes = sum(len(v) for v in top3_per_category.values())
+    print(f"Session: {session_id}")
+    print(f"Total categories: {len(top3_per_category)}")
+    print(f"Top 3 per category: {top3_per_category}")
+
+    product_data = session.get('product_data', {})
+
+    return render_template("templates/a_dashboard.html",
+                           top3_per_category=top3_per_category,
+                           product_data=product_data)
+
+def get_top3_votes_by_category(session_id):
     db_session = get_db_session()
 
-    # Fetch valid votes
     vote_records = (
         db_session.query(BallotVotes)
         .join(Ballot, BallotVotes.badge_id == Ballot.badge_id)
@@ -267,86 +291,86 @@ def dashboard():
         .all()
     )
 
-    # Normalization helper
-    def normalize_vote(v):
-        return re.sub(r"[^\w\d]", "", (v or "").strip()).upper()
-
-    seen_votes = set()
     category_votes = defaultdict(list)
+    seen_votes = set()  # track duplicates: (badge_id, category, vote)
 
     for vote in vote_records:
-        if not vote.category_id:
+        if not vote.category_id or not vote.vote:
             continue
 
-        category = vote.category_id.upper()
-        norm_vote = normalize_vote(vote.vote)
-        key = (vote.badge_id, category, norm_vote)
-
+        key = (vote.badge_id, vote.category_id.upper(), vote.vote.strip())
         if key not in seen_votes:
-            category_votes[category].append(norm_vote)
+            category_votes[vote.category_id.upper()].append(vote.vote.strip())
             seen_votes.add(key)
 
     top3_per_category = {}
     for category, votes in category_votes.items():
         counts = Counter(votes)
-        top_votes = counts.most_common(3)
-        top3_per_category[category] = top_votes
-
-    # Debug print
-    print(f"Session: {session_id}")
-    print(f"Unique ballots counted: {len(set([v.badge_id for v in vote_records]))}")
-    print(f"Vote records retrieved: {len(vote_records)}")
-    print("Top 3 per category:")
-    for cat, results in top3_per_category.items():
-        print(f"Category {cat}: {results}")
+        top3_per_category[category] = counts.most_common(3)
 
     db_session.close()
-    product_data = session.get('product_data', {})
-    return render_template("templates/a_dashboard.html",
-                       top3_per_category=top3_per_category,
-                       product_data=product_data)
+    return top3_per_category
 
 
-@app.route('/export_excel')
-def export_excel():
+SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+SERVICE_ACCOUNT_FILE = 'even-flight-463203-v1-a28e0ee1c361.json'
+category_to_name = {"A":"Freshwater Rods","B":"Saltwater Rods","C":"Rod & Reel Combo","D":"Freshwater Reels","E":"Saltwater Reels","G":"Freshwater Soft Lures","H":"Saltwater Soft Lures","I":"Freshwater Hard Lures","J":"Saltwater Hard Lures","F":"Fly Fishing Rods","FA":"Fly Fishing Reels","FB":"Fly Fishing Rod & Reel Combo","FC":"Fly Fishing Waders & Wading Boots","FD":"Fly Lines, Leaders, Tippet & Line Accessories","FE":"Fly Fishing Technical & General Apparel","FF":"Fly Tying Vise, Tool & Material","FG":"Fly Fishing Backpacks, Bag & Luggage","FH":"Fly Fishing Tool & Accessories","K":"Fishing Line","KA":"Terminal Tackle","KB":"Tackle Management","KC":"Kids’ Tackle","L":"Fishing Accessories","M":"Cutlery, Hand Pliers or Tools","N":"Soft and Hard Coolers","O":"Custom Tackle & Components","P":"Cold Weather Technical Apparel for Men","PA":"Cold Weather Technical Apparel for Women","Q":"Warm Weather Technical Apparel for Men","QA":"Warm Weather Technical Apparel for Women","R":"Lifestyle Apparel for Men","RA":"Lifestyle Apparel for Women","S":"Footwear","T":"Eyewear","U":"Novelties & Wellness","V":"Boats & Watercraft","W":"Motorized Boating Accessories","WA":"Non Motorized Boating Accessories","X":"Ice Fishing","Y":"Electronics","YA":"Energy"}
+
+def get_gsheet_client():
+    creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+    return gspread.authorize(creds)
+
+@app.route('/export_gsheet')
+def export_gsheet():
     session_id = session.get("session_id")
     if not session_id:
         flash('Please log in or create a session first.')
         return redirect(url_for('login'))
 
     top3_per_category = get_top3_votes_by_category(session_id)
+    gc = get_gsheet_client()
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Top 3 Results"
+    spreadsheet_id = session.get('spreadsheet_id')
 
-    ws.append([
+    if spreadsheet_id:
+        try:
+            spreadsheet = gc.open_by_key(spreadsheet_id)
+            worksheet = spreadsheet.sheet1
+            worksheet.clear()
+        except gspread.exceptions.GSpreadException:
+            spreadsheet = None
+    else:
+        spreadsheet = None
+
+    if spreadsheet is None:
+        spreadsheet_name = f"Top3Votes_Session_{session_id}"
+        spreadsheet = gc.create(spreadsheet_name)
+        spreadsheet.share(None, perm_type='anyone', role='writer')
+        worksheet = spreadsheet.sheet1
+        worksheet.update_title("Top 3 Results")
+        session['spreadsheet_id'] = spreadsheet.id
+
+    header = [
         "", "Catagory ID Field", "Alpha",
         "1st Place ID", "1st Votes #",
         "2nd Place ID", "2nd Votes #",
         "3rd Place ID", "3rd Votes #"
-    ])
+    ]
+    worksheet.append_row(header)
 
     for category_id, top_votes in top3_per_category.items():
-        row = ["", "", category_id]
+        product_name = category_to_name.get(category_id, "Unknown Category")
+        row = [product_name, category_id]
         for i in range(3):
             if i < len(top_votes):
                 row.extend([top_votes[i][0], top_votes[i][1]])
             else:
                 row.extend(["", ""])
-        ws.append(row)
+        worksheet.append_row(row)
 
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
-
-    return send_file(
-        output,
-        download_name="top3_votes.xlsx",
-        as_attachment=True,
-        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    )
-
+    sheet_url = spreadsheet.url
+    flash(Markup(f"Google Sheets: <a href='{sheet_url}' target='_blank'>{sheet_url}</a>"))
+    return redirect(url_for('dashboard'))
 
 @app.route('/review')
 def review_dashboard():
