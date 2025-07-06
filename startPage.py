@@ -280,7 +280,6 @@ def review_dashboard():
     session_uuid = uuid.UUID(session_id)
     db_session = get_db_session()
 
-
     ballots_with_badge_issues = (
         db_session.query(Ballot)
         .filter(Ballot.session_id == session_uuid, Ballot.badge_status == 'unreadable', Ballot.validity == True)
@@ -303,10 +302,8 @@ def review_dashboard():
             's3_url': s3_url,
         })
 
-   
-    
     votes_with_errors = (
-        db_session.query(BallotVotes)
+        db_session.query(BallotVotes, Ballot)
         .join(Ballot, BallotVotes.ballot_id == Ballot.id)
         .filter(
             Ballot.session_id == session_uuid,
@@ -316,10 +313,9 @@ def review_dashboard():
         .all()
     )
      
-
     votes_data = []
-    for vote in votes_with_errors:
-        print("Vote:", vote.id, "ballot_id:", vote.ballot_id, "badge_id:", vote.badge_id)
+    for vote, ballot in votes_with_errors:
+        print("Vote:", vote.id, "ballot_id:", vote.ballot_id, "badge_id:", ballot.badge_id)
         s3_url = None
         if vote.key:
             s3_url = s3.generate_presigned_url(
@@ -331,7 +327,7 @@ def review_dashboard():
             'vote_id': vote.id,
             'category': vote.category_id,
             'current_vote': vote.vote,
-            'badge_id': vote.badge_id,
+            'badge_id': ballot.badge_id, 
             's3_url': s3_url,
             'name': vote.name
         })
