@@ -354,7 +354,7 @@
         <table>
           <thead>
             <tr>
-              <th>Vote ID</th>
+              <th>Badge ID</th>
               <th>Ballot Name</th>
               <th>Category</th>
               <th>Vote</th>
@@ -365,7 +365,7 @@
           <tbody>
             {% for vote in votes %}
               <tr>
-                <td>{{ vote.vote_id }}</td>
+                <td>{% if vote.badge_id %}{{ vote.badge_id }}{% else %}<span style="color: red;">(empty)</span>{% endif %}</td>
                 <td>{{ vote.name }}</td>
                 <td>{{ vote.category }}</td>
                 <td style="color:red">{{ vote.current_vote }}</td>
