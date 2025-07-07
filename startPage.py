@@ -20,12 +20,11 @@ from db_model import (
     OCRResult,
     BallotVotes,
     SessionLocal,
-    Product
 )
 from db_utils import validate_user_session, insert_user_session, insert_products
 from easy_ocr import process_image, badge_id_exists, readable_badge_id_exists
 from io import BytesIO
-from openpyxl import Workbook, load_workbook
+from openpyxl import Workbook
 import zipfile
 from botocore.exceptions import NoCredentialsError, ClientError
 from collections import defaultdict, Counter
@@ -91,6 +90,7 @@ def logout():
 
 @app.route('/create-session', methods=['GET', 'POST'])
 def create_session():
+    session['joined_existing'] = False
 
     if request.method == 'POST':
         password = request.form.get('password')
@@ -117,6 +117,7 @@ def create_session():
 
 @app.route('/join-session', methods=['GET', 'POST'])
 def join_session():
+    session['joined_existing'] = True
     if request.method == 'POST':
         session_id = UUID(request.form.get('session_id'))
         password = request.form.get('password')
@@ -126,7 +127,7 @@ def join_session():
         ).first()
         db_session.close()
         if user_session:
-            session['session_id'] = session_id
+            session['session_id'] = str(session_id)
             session['joined_existing'] = True
             flash(f'Joined session successfully.')
             return redirect(url_for('upload_files'))
@@ -135,31 +136,29 @@ def join_session():
             return redirect(request.url)
     return render_template('templates/a_joinSession.html')
 
-
 @app.route('/upload-file', methods=['GET', 'POST'])
 def upload_files():
     session_id = session.get('session_id')
-    short_session_id = session.get('short_session_id') 
+    short_session_id = session.get('short_session_id')
     if not session_id:
         flash('Please log in or create a session first.')
         return redirect(url_for('login'))
 
     db_session = get_db_session()
     joined_existing = session.get('joined_existing', False)
-    existing_badges = db_session.query(ValidBadgeIDs).filter_by(session_id=session_id).first()
-    existing_zip = db_session.query(UploadedZip).filter_by(session_id=session_id).first()
 
     if request.method == 'POST':
         badgeFile = request.files.get('badge_file')
         zipFile = request.files.get('zip_file')
 
-        if not badgeFile and not zipFile and joined_existing:
-            if joined_existing and (existing_badges or existing_zip):
-                flash('Empty session, please reupload.')
+        # allow skip if nothing selected, but only if joined_existing
+        if not badgeFile and not zipFile:
+            if joined_existing:
+                flash('No new files selected. Using existing files.')
                 db_session.close()
                 return redirect(url_for('dashboard'))
             else:
-                flash('Please upload both badge and ZIP files.')
+                flash('Please upload at least badge file or ZIP file.')
                 db_session.close()
                 return redirect(request.url)
 
@@ -193,20 +192,11 @@ def upload_files():
                 try:
                     UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads')
                     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
                     local_zip_path = os.path.join(UPLOAD_FOLDER, filename)
-
                     with open(local_zip_path, "wb") as f:
                         f.write(zip_bytes)
 
-
-                    wsl_zip_path = local_zip_path
-
-                    print("ZIP saved at:", local_zip_path)
-                    print("WSL path sent to Celery:", wsl_zip_path)
-
-                    preprocess_zip_task.delay(wsl_zip_path, session_id)
-
+                    preprocess_zip_task.delay(local_zip_path, session_id)
                     flash("ZIP file uploaded. Processing started in background.")
                 except zipfile.BadZipFile:
                     flash('Invalid ZIP file.')
@@ -229,29 +219,45 @@ def upload_files():
         return redirect(url_for('dashboard'))
 
     db_session.close()
-    return render_template(
-        'templates/a_upload.html',
-        joined_existing=joined_existing and (existing_badges or existing_zip),
-        session_id=session_id, short_session_id = short_session_id
-    )
+    return render_template('templates/a_upload.html',
+                           short_session_id=short_session_id,
+                           session_id=session_id,
+                           joined_existing=joined_existing)
+
+@app.route('/revisit-upload')
+def revisit_upload():
+    session['joined_existing'] = True
+    return redirect(url_for('upload_files'))
+
 
 @app.route('/dashboard')
 def dashboard():
-    session_id = session.get('session_id')
+    session_id = session.get("session_id")
     if not session_id:
-        flash('Please log in first.')
+        flash('Please log in or create a session first.')
         return redirect(url_for('login'))
 
     top3_per_category = get_top3_votes_by_category(session_id)
-    return render_template('templates/a_dashboard.html', top3_per_category=top3_per_category)
+
+    total_votes = sum(len(v) for v in top3_per_category.values())
+    print(f"Session: {session_id}")
+    print(f"Total categories: {len(top3_per_category)}")
+    print(f"Top 3 per category: {top3_per_category}")
+
+    product_data = session.get('product_data', {})
+
+    return render_template("templates/a_dashboard.html",
+                           top3_per_category=top3_per_category,
+                           product_data=product_data)
 
 
 def get_top3_votes_by_category(session_id):
-    session_uuid = uuid.UUID(session_id)
-    db_session = get_db_session()
+    if isinstance(session_id, uuid.UUID):
+        session_uuid = session_id
+    else:
+        session_uuid = uuid.UUID(session_id)
 
-    valid_products = db_session.query(Product.category_id, Product.product_number).all()
-    valid_product_set = set((cat.upper(), num.strip()) for cat, num in valid_products)
+    db_session = get_db_session()
 
     vote_records = (
         db_session.query(BallotVotes)
@@ -267,44 +273,24 @@ def get_top3_votes_by_category(session_id):
     )
 
     category_votes = defaultdict(list)
-    seen_votes = set()
+    seen_votes = set()  
 
     for vote in vote_records:
         if not vote.category_id or not vote.vote:
             continue
 
-        category_id = vote.category_id.upper()
-        product_number = vote.vote.strip()
-        key = (vote.badge_id, category_id, product_number)
-
-        if key not in seen_votes and (category_id, product_number) in valid_product_set:
-            category_votes[category_id].append(product_number)
+        key = (vote.badge_id, vote.category_id.upper(), vote.vote.strip())
+        if key not in seen_votes:
+            category_votes[vote.category_id.upper()].append(vote.vote.strip())
             seen_votes.add(key)
 
     top3_per_category = {}
     for category, votes in category_votes.items():
         counts = Counter(votes)
-        top_votes = counts.most_common(3)
-
-        product_name_map = {
-            num: db_session.query(Product.product_name)
-                        .filter_by(category_id=category, product_number=num)
-                        .scalar()
-            for num, _ in top_votes
-        }
-
-        top3_per_category[category] = [
-            {
-                "product_number": num,
-                "product_name": product_name_map.get(num, "Unknown"),
-                "count": count
-            }
-            for num, count in top_votes
-        ]
+        top3_per_category[category] = counts.most_common(3)
 
     db_session.close()
     return top3_per_category
-
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 SERVICE_ACCOUNT_FILE = 'even-flight-463203-v1-a28e0ee1c361.json'
@@ -357,14 +343,10 @@ def export_gsheet():
         row = [product_name, category_id]
         for i in range(3):
             if i < len(top_votes):
-                row.extend([
-                    top_votes[i]["product_number"], 
-                    top_votes[i]["count"]
-                ])
+                row.extend([top_votes[i][0], top_votes[i][1]])
             else:
                 row.extend(["", ""])
         worksheet.append_row(row)
-
 
     sheet_url = spreadsheet.url
     flash(Markup(f"Google Sheets: <a href='{sheet_url}' target='_blank'>{sheet_url}</a>"))
