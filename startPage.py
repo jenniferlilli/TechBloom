@@ -284,7 +284,6 @@ def dashboard():
         flash('Please log in or create a session first.')
         return redirect(url_for('login'))
 
-    session_uuid = uuid.UUID(session_id)
     top3_per_category = get_top3_votes_by_category(session_id)
 
     total_votes = sum(len(v) for v in top3_per_category.values())
@@ -296,17 +295,18 @@ def dashboard():
 
     return render_template("templates/a_dashboard.html",
                            top3_per_category=top3_per_category,
-                           product_data=product_data, badges=badges_data, votes=votes_data)
+                           product_data=product_data)
 
 
 def get_top3_votes_by_category(session_id):
+    session_uuid = uuid.UUID(session_id)
     db_session = get_db_session()
 
     vote_records = (
         db_session.query(BallotVotes)
-        .join(Ballot, BallotVotes.badge_id == Ballot.badge_id)
+        .join(Ballot, BallotVotes.ballot_id == Ballot.id)
         .filter(
-            Ballot.session_id == session_id,
+            Ballot.session_id == session_uuid,
             Ballot.badge_status == 'readable',
             Ballot.validity == True,
             BallotVotes.is_valid == True,
