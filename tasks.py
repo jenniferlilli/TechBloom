@@ -20,7 +20,8 @@ s3_client = boto3.client('s3')
 def preprocess_zip_task(self, zip_path, session_id):
     db_session = get_db_session()
     processed_count = 0
-    session_uuid = uuid.UUID(session_id)
+
+    session_uuid = uuid.UUID(str(session_id))
 
     try:
         with zipfile.ZipFile(zip_path, 'r') as archive:
@@ -37,10 +38,10 @@ def preprocess_zip_task(self, zip_path, session_id):
                 badge_key = result['badge_key']
                 ocr_result = result['items']
 
-                if badge_key == "" and (badge_id_exists(session_id, badge_id) and not readable_badge_id_exists(session_id, badge_id)):
+                if badge_key == "" and (badge_id_exists(session_uuid, badge_id) and not readable_badge_id_exists(session_uuid, badge_id)):
                     validity = True
                     badge_status = 'readable'
-                elif badge_key == "" and ((not badge_id_exists(session_id, badge_id)) or readable_badge_id_exists(session_id, badge_id)):
+                elif badge_key == "" and ((not badge_id_exists(session_uuid, badge_id)) or readable_badge_id_exists(session_uuid, badge_id)):
                     validity = False
                     badge_status = 'readable'
                 else:
@@ -62,7 +63,7 @@ def preprocess_zip_task(self, zip_path, session_id):
                 for item in ocr_result:
                     vote_objects.append(BallotVotes(
                         badge_id=badge_id,
-                        ballot_id=ballot.id,  # Use freshly created ballot.id
+                        ballot_id=ballot.id,  
                         name=file_info.filename,
                         category_id=item['Category ID'],
                         vote=item['Item Number'],
@@ -70,7 +71,6 @@ def preprocess_zip_task(self, zip_path, session_id):
                         is_valid=validity,
                         key=item['Key']
                     ))
-
                 db_session.add_all(vote_objects)
 
                 db_session.add(OCRResult(
@@ -80,7 +80,6 @@ def preprocess_zip_task(self, zip_path, session_id):
                 ))
 
                 db_session.commit()
-
                 processed_count += 1
 
         return {'status': 'completed', 'processed_count': processed_count}
