@@ -413,110 +413,96 @@
 
 
   <script>
-    let badgeFile = null;
-    let zipFile = null;
+let badgeFile = null;
+let zipFile = null;
 
-    const badgeArea = document.getElementById('drop-area-badge');
-    const zipArea = document.getElementById('drop-area-zip');
-    const badgeInput = document.getElementById('file-input-badge');
-    const zipInput = document.getElementById('file-input-zip');
+const badgeArea = document.getElementById('drop-area-badge');
+const zipArea = document.getElementById('drop-area-zip');
+const badgeInput = document.getElementById('file-input-badge');
+const zipInput = document.getElementById('file-input-zip');
 
-    const badgeFileNameDisplay = document.getElementById('badge-file-name');
-    const zipFileNameDisplay = document.getElementById('zip-file-name');
+const badgeFileNameDisplay = document.getElementById('badge-file-name');
+const zipFileNameDisplay = document.getElementById('zip-file-name');
 
-    function isBadgeFile(file) {
-      return file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.txt');
+function isBadgeFile(file) {
+  return file && (file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.txt'));
+}
+
+function isZipFile(file) {
+  return file && file.name.toLowerCase().endsWith('.zip');
+}
+
+function setupDropArea(area, input, fileCheckFn, onFileSelected) {
+  ['dragenter', 'dragover'].forEach(event => {
+    area.addEventListener(event, e => {
+      e.preventDefault();
+      e.stopPropagation();
+      area.classList.add('highlight');
+    }, false);
+  });
+  ['dragleave', 'drop'].forEach(event => {
+    area.addEventListener(event, e => {
+      e.preventDefault();
+      e.stopPropagation();
+      area.classList.remove('highlight');
+    }, false);
+  });
+  area.addEventListener('drop', e => {
+    const file = e.dataTransfer.files[0];
+    if (!fileCheckFn(file)) {
+      alert(`Invalid file type.`);
+      return;
     }
-
-    function isZipFile(file) {
-      return file.name.toLowerCase().endsWith('.zip');
+    onFileSelected(file);
+  });
+  input.addEventListener('change', () => {
+    const file = input.files[0];
+    if (!fileCheckFn(file)) {
+      alert(`Invalid file type.`);
+      input.value = '';
+      return;
     }
+    onFileSelected(file);
+  });
+}
 
-    function setupDropArea(area, input, fileCheckFn, onFileSelected) {
-      ['dragenter', 'dragover'].forEach(event => {
-        area.addEventListener(event, e => {
-          e.preventDefault();
-          e.stopPropagation();
-          area.classList.add('highlight');
-        }, false);
-      });
+setupDropArea(badgeArea, badgeInput, isBadgeFile, file => {
+  badgeFile = file;
+  badgeFileNameDisplay.textContent = `Selected file: ${file.name}`;
+});
+setupDropArea(zipArea, zipInput, isZipFile, file => {
+  zipFile = file;
+  zipFileNameDisplay.textContent = `Selected file: ${file.name}`;
+});
 
-      ['dragleave', 'drop'].forEach(event => {
-        area.addEventListener(event, e => {
-          e.preventDefault();
-          e.stopPropagation();
-          area.classList.remove('highlight');
-        }, false);
-      });
+function uploadFiles() {
+  const formData = new FormData();
+  if (badgeFile) formData.append('badge_file', badgeFile);
+  if (zipFile) formData.append('zip_file', zipFile);
 
-      area.addEventListener('drop', e => {
-        const file = e.dataTransfer.files[0];
-        if (!fileCheckFn(file)) {
-          alert(`Invalid file type.`);
-          return;
-        }
-        onFileSelected(file);
-      });
+  if (!badgeFile && !zipFile && {{ 'true' if joined_existing else 'false' }} === false) {
+    alert('Please select at least one file to upload.');
+    return;
+  }
 
-      input.addEventListener('change', () => {
-        const file = input.files[0];
-        if (!fileCheckFn(file)) {
-          alert(`Invalid file type.`);
-          input.value = '';
-          return;
-        }
-        onFileSelected(file);
-      });
-    }
+  const submitButton = document.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  submitButton.textContent = 'Uploading...';
+  submitButton.style.backgroundColor = '#fddde6';
+  submitButton.style.borderColor = '#fddde6';
+  submitButton.style.color = '#ffffff';
+  submitButton.style.cursor = 'not-allowed';
 
-    setupDropArea(badgeArea, badgeInput, isBadgeFile, file => {
-      badgeFile = file;
-      badgeFileNameDisplay.textContent = `Selected file: ${file.name}`;
-    });
-    setupDropArea(zipArea, zipInput, isZipFile, file => {
-      zipFile = file;
-      zipFileNameDisplay.textContent = `Selected file: ${file.name}`;
-    });
-
-    function uploadFiles() {
-      if (!badgeFile || !zipFile) {
-        alert('Please provide both a badge file and a ZIP file.');
-        return;
-      }
-
-      const submitButton = document.querySelector('button[type="submit"]');
-      submitButton.disabled = true;
-      submitButton.textContent = 'Uploading...';
-      submitButton.style.backgroundColor = '#fddde6';
-      submitButton.style.borderColor = '#fddde6';
-      submitButton.style.color = '#ffffff';
-      submitButton.style.cursor = 'not-allowed';
-
-      const formData = new FormData();
-      formData.append('badge_file', badgeFile);
-      formData.append('zip_file', zipFile);
-
-      fetch("{{ url_for('upload_files') }}", {
-        method: 'POST',
-        body: formData
-      }).then(response => {
-        if (response.redirected) {
-          window.location.href = response.url;
-        } else {
-          return response.text().then(data => {
-            alert('Upload failed. Check server logs or validations.');
-            console.log(data);
-            submitButton.disabled = false;
-            submitButton.textContent = 'Submit Files';
-            submitButton.style.backgroundColor = '#FDBFC9';
-            submitButton.style.borderColor = '#FDBFC9';
-            submitButton.style.color = '#ffffff';
-            submitButton.style.cursor = 'pointer';
-          });
-        }
-      }).catch(error => {
-        console.error('Upload error:', error);
-        alert('Upload failed.');
+  fetch("{{ url_for('upload_files') }}", {
+    method: 'POST',
+    body: formData
+  }).then(response => {
+    if (response.redirected) {
+      window.location.href = response.url;
+    } else {
+      return response.text().then(data => {
+        alert('Upload failed. Check server logs or validations.');
+        console.log(data);
         submitButton.disabled = false;
         submitButton.textContent = 'Submit Files';
         submitButton.style.backgroundColor = '#FDBFC9';
@@ -525,59 +511,62 @@
         submitButton.style.cursor = 'pointer';
       });
     }
+  }).catch(error => {
+    console.error('Upload error:', error);
+    alert('Upload failed.');
+    submitButton.disabled = false;
+    submitButton.textContent = 'Submit Files';
+    submitButton.style.backgroundColor = '#FDBFC9';
+    submitButton.style.borderColor = '#FDBFC9';
+    submitButton.style.color = '#ffffff';
+    submitButton.style.cursor = 'pointer';
+  });
+}
 
-    function navigateBackWithAnimation() {
-      localStorage.setItem('shouldAnimate', 'true');
-
-      if (window.history.length > 1) {
-        window.history.back();
-      } else {
-        window.location.href = "/";
-      }
-    }
-
-    function skipUpload() {
-      fetch("{{ url_for('upload_files') }}", {
-        method: 'POST',
-        body: new FormData()
-      }).then(response => {
-        if (response.redirected) {
-          window.location.href = response.url;
-        } else {
-          return response.text().then(data => {
-            alert('Skip failed. Check server response.');
-            console.log(data);
-          });
-        }
-      }).catch(error => {
-        console.error('Skip error:', error);
-        alert('Skip failed.');
-      });
-    }
-
-    setTimeout(() => {
-      const flashContainer = document.getElementById('flash-messages');
-      if (flashContainer) {
-        flashContainer.style.transition = 'opacity 0.7s ease';
-        flashContainer.style.opacity = '0';
-        setTimeout(() => {
-          flashContainer.style.display = 'none';
-      }, 700);
-    }
-  }, 3000);
-  </script>
-<script>
-  function copySessionId() {
-    const fullId = "{{ session_id }}";
-    navigator.clipboard.writeText(fullId)
-      .then(() => {
-        alert("Full session ID copied to clipboard!");
-      })
-      .catch(err => {
-        console.error('Failed to copy:', err);
-        alert("Failed to copy session ID");
-      });
+function navigateBackWithAnimation() {
+  localStorage.setItem('shouldAnimate', 'true');
+  if (window.history.length > 1) {
+    window.history.back();
+  } else {
+    window.location.href = "/";
   }
+}
+
+function skipUpload() {
+  fetch("{{ url_for('upload_files') }}", {
+    method: 'POST',
+    body: new FormData()
+  }).then(response => {
+    if (response.redirected) {
+      window.location.href = response.url;
+    } else {
+      return response.text().then(data => {
+        alert('Skip failed. Check server response.');
+        console.log(data);
+      });
+    }
+  }).catch(error => {
+    console.error('Skip error:', error);
+    alert('Skip failed.');
+  });
+}
+
+setTimeout(() => {
+  const flashContainer = document.getElementById('flash-messages');
+  if (flashContainer) {
+    flashContainer.style.transition = 'opacity 0.7s ease';
+    flashContainer.style.opacity = '0';
+    setTimeout(() => { flashContainer.style.display = 'none'; }, 700);
+  }
+}, 3000);
+</script>
+<script>
+function copySessionId() {
+  const fullId = "{{ session_id }}";
+  navigator.clipboard.writeText(fullId)
+    .then(() => { alert("Full session ID copied to clipboard!"); })
+    .catch(err => { console.error('Failed to copy:', err); alert("Failed to copy session ID"); });
+}
 </script>
 
 </body>
