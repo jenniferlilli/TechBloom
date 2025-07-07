@@ -548,6 +548,32 @@ function skipUpload() {
     });
 }
 </script>
+  <script>
+
+    setTimeout(() => {
+      const flashContainer = document.getElementById('flash-messages');
+      if (flashContainer) {
+        flashContainer.style.transition = 'opacity 0.7s ease';
+        flashContainer.style.opacity = '0';
+        setTimeout(() => {
+          flashContainer.style.display = 'none';
+      }, 700);
+    }
+  }, 3000);
+  </script>
+<script>
+  function copySessionId() {
+    const fullId = "{{ session_id }}";
+    navigator.clipboard.writeText(fullId)
+      .then(() => {
+        alert("Full session ID copied to clipboard!");
+      })
+      .catch(err => {
+        console.error('Failed to copy:', err);
+        alert("Failed to copy session ID");
+      });
+  }
+</script>
 
 </body>
 </html>

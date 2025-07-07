@@ -67,12 +67,13 @@ class Product(Base):
     product_name = Column(String, nullable=False)
 
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL not defined in .env file")
 
-engine = create_engine(DATABASE_URL)
+print(f"Connecting to database at: {DATABASE_URL}")
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
 Base.metadata.create_all(engine)
 

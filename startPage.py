@@ -2,12 +2,16 @@ import os
 import boto3
 import json
 import re
+import uuid
 from uuid import uuid4
+from uuid import UUID
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_file
 from markupsafe import Markup
 from flask_cors import CORS
 from sqlalchemy import func, desc
 from werkzeug.utils import secure_filename
+from dotenv import load_dotenv
+load_dotenv()
 from db_model import (
     ValidBadgeIDs,
     Ballot,
@@ -29,7 +33,8 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 import random
-
+from tasks import preprocess_zip_task  
+from flask import jsonify
 s3 = boto3.client('s3')
 bucket_name = 'techbloom-ballots'
 
@@ -39,6 +44,10 @@ app.secret_key = 'secret-key'
 
 ALLOWED_BADGE_EXTENSIONS = {'csv', 'txt'}
 ALLOWED_ZIP_EXTENSIONS = {'zip'}
+
+from celery_app import make_celery
+
+celery = make_celery()
 
 def get_db_session():
     return SessionLocal()
@@ -68,6 +77,7 @@ def is_junk_file(file_info):
         not basename.strip()
     )
 
+
 @app.route('/login')
 def login():
     return render_template('templates/a_login.html')
@@ -77,33 +87,37 @@ def logout():
     return render_template('templates/a_login.html')
 
 
+
 @app.route('/create-session', methods=['GET', 'POST'])
 def create_session():
+
     if request.method == 'POST':
         password = request.form.get('password')
         db_session = get_db_session()
-        session_id = str(uuid4())
+        session_id = uuid4()
+        print("Generated UUID:", session_id)
         existing = db_session.query(UserSession).filter_by(session_id=session_id).first()
         while existing:
-            session_id = str(uuid4())
+            session_id = uuid4()
             existing = db_session.query(UserSession).filter_by(session_id=session_id).first()
 
         db_session.add(UserSession(session_id=session_id, password=password))
         db_session.commit()
         db_session.close()
 
-        session['session_id'] = session_id
+        session['session_id'] = str(session_id)
+        session['short_session_id'] = str(session_id)[:8]
+
         flash('Generated Session ID successfully.')
         return redirect(url_for('upload_files'))
 
     return render_template('templates/a_createSession.html')
 
 
-
 @app.route('/join-session', methods=['GET', 'POST'])
 def join_session():
     if request.method == 'POST':
-        session_id = request.form.get('session_id')
+        session_id = UUID(request.form.get('session_id'))
         password = request.form.get('password')
         db_session = get_db_session()
         user_session = db_session.query(UserSession).filter_by(
@@ -124,6 +138,7 @@ def join_session():
 @app.route('/upload-file', methods=['GET', 'POST'])
 def upload_files():
     session_id = session.get('session_id')
+    short_session_id = session.get('short_session_id') 
     if not session_id:
         flash('Please log in or create a session first.')
         return redirect(url_for('login'))
@@ -136,12 +151,16 @@ def upload_files():
         zipFile = request.files.get('zip_file')
         excelFile = request.files.get('excel_file')
 
-        if not joined_existing and (not badgeFile or not zipFile or not excelFile):
-            flash('All three files are required for new sessions.')
-            db_session.close()
-            return redirect(request.url)
+        if not badgeFile and not zipFile and joined_existing:
+            if joined_existing and (existing_badges or existing_zip):
+                flash('Empty session, please reupload.')
+                db_session.close()
+                return redirect(url_for('dashboard'))
+            else:
+                flash('Please upload both badge and ZIP files.')
+                db_session.close()
+                return redirect(request.url)
 
-        # badge process
         if badgeFile and allowed_file(badgeFile.filename, ALLOWED_BADGE_EXTENSIONS):
             try:
                 badge_lines = badgeFile.read().decode('utf-8').splitlines()
@@ -152,57 +171,57 @@ def upload_files():
                 db_session.commit()
                 flash('Badge IDs uploaded successfully.')
             except UnicodeDecodeError:
-                flash('Badge file must be UTF-8 encoded (.csv or .txt).')
+                flash('Badge file must be UTF-8 encoded text (.csv or .txt).', 'error')
                 db_session.close()
                 return redirect(request.url)
+        elif badgeFile:
+            flash('Invalid badge file. Must be .csv or .txt')
+            db_session.close()
+            return redirect(request.url)
 
-        # zip process
         if zipFile and allowed_file(zipFile.filename, ALLOWED_ZIP_EXTENSIONS):
-            try:
-                filename = secure_filename(zipFile.filename)
-                zip_bytes = zipFile.read()
-                zip_key = f'{session_id}/{filename}'
+            filename = secure_filename(zipFile.filename)
+            zip_bytes = zipFile.read()
+            zip_key = f'{session_id}/{filename}'
 
-                if upload_to_s3(BytesIO(zip_bytes), bucket_name, zip_key):
-                    db_session.add(UploadedZip(session_id=session_id, filename=filename))
-                    db_session.commit()
+            if upload_to_s3(BytesIO(zip_bytes), bucket_name, zip_key):
+                db_session.add(UploadedZip(session_id=session_id, filename=filename))
+                db_session.commit()
 
-                    with zipfile.ZipFile(BytesIO(zip_bytes)) as archive:
-                        processed_count = 0
-                        for file_info in archive.infolist():
-                            if is_junk_file(file_info):
-                                continue
-                            if file_info.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-                                existing_file = db_session.query(OCRResult).filter_by(
-                                    filename=file_info.filename,
-                                    session_id=session_id
-                                ).first()
-                                if existing_file:
-                                    print(f"Skipping duplicate file: {file_info.filename}")
-                                    continue
+                try:
+                    UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads')
+                    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-                                with archive.open(file_info) as image_file:
-                                    image_data = image_file.read()
-                                    image_key = f"{session_id}/ballots/{file_info.filename}"
-                                    upload_to_s3(BytesIO(image_data), bucket_name, image_key)
-                                    try:
-                                        ocr_text = process_image(image_data, file_info.filename, session_id)
-                                        db_session.add(OCRResult(
-                                            session_id=session_id,
-                                            filename=file_info.filename,
-                                            extracted_text=json.dumps(ocr_text)
-                                        ))
-                                        processed_count += 1
-                                    except Exception as e:
-                                        print(f"OCR failed for {file_info.filename}: {e}")
-                    db_session.commit()
-                    flash(f'Successfully processed {processed_count} ballot images.')
-                else:
-                    flash('Failed to upload ZIP file to S3.')
-            except zipfile.BadZipFile:
-                flash('Invalid ZIP file.')
+                    local_zip_path = os.path.join(UPLOAD_FOLDER, filename)
+
+                    with open(local_zip_path, "wb") as f:
+                        f.write(zip_bytes)
+
+
+                    wsl_zip_path = local_zip_path
+
+                    print("ZIP saved at:", local_zip_path)
+                    print("WSL path sent to Celery:", wsl_zip_path)
+
+                    preprocess_zip_task.delay(wsl_zip_path, session_id)
+
+                    flash("ZIP file uploaded. Processing started in background.")
+                except zipfile.BadZipFile:
+                    flash('Invalid ZIP file.')
+                    db_session.close()
+                    return redirect(request.url)
+                except Exception as e:
+                    flash(f'Error saving or processing ZIP: {str(e)}')
+                    db_session.close()
+                    return redirect(request.url)
+            else:
+                flash('Failed to upload ZIP to S3.')
                 db_session.close()
                 return redirect(request.url)
+        elif zipFile:
+            flash('Invalid file type. ZIP required.')
+            db_session.close()
+            return redirect(request.url)
 
         #process excel into list
         if excelFile and allowed_file(excelFile.filename, {'xlsx'}):
@@ -251,9 +270,12 @@ def upload_files():
         db_session.close()
         return redirect(url_for('dashboard'))
 
-    return render_template('templates/a_upload.html', joined_existing=joined_existing)
-
-
+    db_session.close()
+    return render_template(
+        'templates/a_upload.html',
+        joined_existing=joined_existing and (existing_badges or existing_zip),
+        session_id=session_id, short_session_id = short_session_id
+    )
 
 @app.route('/dashboard')
 def dashboard():
@@ -262,6 +284,7 @@ def dashboard():
         flash('Please log in or create a session first.')
         return redirect(url_for('login'))
 
+    session_uuid = uuid.UUID(session_id)
     top3_per_category = get_top3_votes_by_category(session_id)
 
     total_votes = sum(len(v) for v in top3_per_category.values())
@@ -273,7 +296,8 @@ def dashboard():
 
     return render_template("templates/a_dashboard.html",
                            top3_per_category=top3_per_category,
-                           product_data=product_data)
+                           product_data=product_data, badges=badges_data, votes=votes_data)
+
 
 def get_top3_votes_by_category(session_id):
     db_session = get_db_session()
@@ -310,7 +334,6 @@ def get_top3_votes_by_category(session_id):
 
     db_session.close()
     return top3_per_category
-
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 SERVICE_ACCOUNT_FILE = 'even-flight-463203-v1-a28e0ee1c361.json'
@@ -372,21 +395,24 @@ def export_gsheet():
     flash(Markup(f"Google Sheets: <a href='{sheet_url}' target='_blank'>{sheet_url}</a>"))
     return redirect(url_for('dashboard'))
 
+
+
 @app.route('/review')
 def review_dashboard():
     session_id = session.get("session_id")
     if not session_id:
         flash("Please log in or create a session first.")
         return redirect(url_for("login"))
+
+    session_uuid = uuid.UUID(session_id)
     db_session = get_db_session()
-    
 
     ballots_with_badge_issues = (
         db_session.query(Ballot)
-        .filter(Ballot.session_id == session_id,
-                Ballot.badge_status == 'unreadable')
+        .filter(Ballot.session_id == session_uuid, Ballot.badge_status == 'unreadable', Ballot.validity == True)
         .all()
     )
+    
     badges_data = []
     for ballot in ballots_with_badge_issues:
         s3_url = None
@@ -398,26 +424,25 @@ def review_dashboard():
             )
         badges_data.append({
             'name': ballot.name,
-            'id' : ballot.id,
+            'id': ballot.id,
             'badge_id': ballot.badge_id,
             's3_url': s3_url,
         })
 
     votes_with_errors = (
-        db_session.query(BallotVotes)
+        db_session.query(BallotVotes, Ballot)
         .join(Ballot, BallotVotes.ballot_id == Ballot.id)
         .filter(
-            Ballot.session_id == session_id,
-            Ballot.badge_status == "readable",
-            Ballot.validity == True,
+            Ballot.session_id == session_uuid,
             BallotVotes.vote_status == "unreadable",
             BallotVotes.is_valid == True
         )
         .all()
     )
-    
+     
     votes_data = []
-    for vote in votes_with_errors:
+    for vote, ballot in votes_with_errors:
+        print("Vote:", vote.id, "ballot_id:", vote.ballot_id, "badge_id:", ballot.badge_id)
         s3_url = None
         if vote.key:
             s3_url = s3.generate_presigned_url(
@@ -429,17 +454,23 @@ def review_dashboard():
             'vote_id': vote.id,
             'category': vote.category_id,
             'current_vote': vote.vote,
-            'badge_id': vote.badge_id,
+            'badge_id': ballot.badge_id, 
             's3_url': s3_url,
             'name': vote.name
         })
     print(votes_data)
+
+    print("Session ID:", session_id)
+    print("Bad ballots found:", len(badges_data))
+    print("Unreadable votes found:", len(votes_data))
+
     db_session.close()
     return render_template('templates/a_review_db.html', badges=badges_data, votes=votes_data)
 
 @app.route('/fix_vote', methods=['POST'])
 def fix_vote():
     session_id = session.get('session_id')
+    session_id = uuid.UUID(session_id)
     vote_id = request.form.get('vote_id')
     new_vote = request.form.get('vote', '').strip()
 
@@ -469,7 +500,7 @@ def fix_vote():
     if vote.key:
         try:
             s3.delete_object(Bucket=bucket_name, Key=vote.key)
-            vote.key = ""  # Clear the key after deletion
+            vote.key = "" 
         except Exception as e:
             print(f"Failed to delete S3 object {vote.key}: {e}")
 
@@ -482,6 +513,7 @@ def fix_vote():
 @app.route('/fix_badge', methods=['POST'])
 def fix_badge():
     session_id = session.get('session_id')
+    session_id = uuid.UUID(session_id)
     id = int(request.form['id'])
     print(id)
     new_badge = request.form['badge_id'].strip()
@@ -511,13 +543,6 @@ def fix_badge():
         flash('Badge ID does not exist.')
         db_session.close()
         return redirect(request.referrer)
-
-    ballot.badge_id = new_badge
-    print(f"Before update: badge_status = {ballot.badge_status}")
-    ballot.badge_status = 'readable'  # or the correct new status
-    print(f"After update: badge_status = {ballot.badge_status}")
-    ballot.validity = is_valid
-    ballot.s3_key = ""
     try:
         ballot = db_session.query(Ballot).filter_by(id=id).one()
         ballot.badge_status = 'readable'
@@ -551,6 +576,7 @@ def fix_badge():
 @app.route('/delete_vote/<int:vote_id>')
 def delete_vote(vote_id):
     session_id = session.get('session_id')
+    session_id = uuid.UUID(session_id)
     db_session = get_db_session()
     vote = (
         db_session.query(BallotVotes)
@@ -578,6 +604,7 @@ def delete_vote(vote_id):
 @app.route('/delete_ballot/<int:id>')
 def delete_ballot(id):
     session_id = session.get('session_id')
+    session_id = uuid.UUID(session_id)
     db_session = get_db_session()
     ballot = (
         db_session.query(Ballot)
