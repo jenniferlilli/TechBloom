@@ -20,11 +20,12 @@ from db_model import (
     OCRResult,
     BallotVotes,
     SessionLocal,
+    Product
 )
 from db_utils import validate_user_session, insert_user_session, insert_products
 from easy_ocr import process_image, badge_id_exists, readable_badge_id_exists
 from io import BytesIO
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 import zipfile
 from botocore.exceptions import NoCredentialsError, ClientError
 from collections import defaultdict, Counter
@@ -151,7 +152,6 @@ def upload_files():
     if request.method == 'POST':
         badgeFile = request.files.get('badge_file')
         zipFile = request.files.get('zip_file')
-        excelFile = request.files.get('excel_file')
 
         if not badgeFile and not zipFile and joined_existing:
             if joined_existing and (existing_badges or existing_zip):
@@ -225,50 +225,6 @@ def upload_files():
             db_session.close()
             return redirect(request.url)
 
-        #process excel into list
-        if excelFile and allowed_file(excelFile.filename, {'xlsx'}):
-            try:
-                from openpyxl import load_workbook
-
-                workbook = load_workbook(excelFile, data_only=True)
-                sheet = workbook.active
-
-                product_data = {}  
-
-                for row in sheet.iter_rows(min_row=2, values_only=True):  
-                    if len(row) < 3:
-                        continue
-
-                    product_name = row[0]
-                    category_id = row[1]
-                    product_number = row[2]
-
-                    if not all([product_name, category_id, product_number]):
-                        continue
-
-                    category_id = str(category_id).strip().upper()
-                    product_number = str(product_number).strip()
-                    product_name = str(product_name).strip()
-
-                    if category_id not in product_data:
-                        product_data[category_id] = {}
-
-                    product_data[category_id][product_number] = product_name
-                
-                session['product_data'] = product_data
-                print("Parsed Product Data:", product_data)
-
-                flash('Excel file processed successfully.')
-                '''
-                filename = secure_filename(excelFile.filename)
-                key = f'{session_id}/{filename}'
-                upload_to_s3(BytesIO(excelFile.read()), bucket_name, key)
-                flash('Excel file uploaded.')
-                '''
-            except Exception as e:
-                flash('Excel file processing failed.')
-                print(f"Excel processing error: {e}")
-
         db_session.close()
         return redirect(url_for('dashboard'))
 
@@ -281,28 +237,21 @@ def upload_files():
 
 @app.route('/dashboard')
 def dashboard():
-    session_id = session.get("session_id")
+    session_id = session.get('session_id')
     if not session_id:
-        flash('Please log in or create a session first.')
+        flash('Please log in first.')
         return redirect(url_for('login'))
 
     top3_per_category = get_top3_votes_by_category(session_id)
-
-    total_votes = sum(len(v) for v in top3_per_category.values())
-    print(f"Session: {session_id}")
-    print(f"Total categories: {len(top3_per_category)}")
-    print(f"Top 3 per category: {top3_per_category}")
-
-    product_data = session.get('product_data', {})
-
-    return render_template("templates/a_dashboard.html",
-                           top3_per_category=top3_per_category,
-                           product_data=product_data)
+    return render_template('templates/a_dashboard.html', top3_per_category=top3_per_category)
 
 
 def get_top3_votes_by_category(session_id):
     session_uuid = uuid.UUID(session_id)
     db_session = get_db_session()
+
+    valid_products = db_session.query(Product.category_id, Product.product_number).all()
+    valid_product_set = set((cat.upper(), num.strip()) for cat, num in valid_products)
 
     vote_records = (
         db_session.query(BallotVotes)
@@ -318,24 +267,44 @@ def get_top3_votes_by_category(session_id):
     )
 
     category_votes = defaultdict(list)
-    seen_votes = set()  # track duplicates: (badge_id, category, vote)
+    seen_votes = set()
 
     for vote in vote_records:
         if not vote.category_id or not vote.vote:
             continue
 
-        key = (vote.badge_id, vote.category_id.upper(), vote.vote.strip())
-        if key not in seen_votes:
-            category_votes[vote.category_id.upper()].append(vote.vote.strip())
+        category_id = vote.category_id.upper()
+        product_number = vote.vote.strip()
+        key = (vote.badge_id, category_id, product_number)
+
+        if key not in seen_votes and (category_id, product_number) in valid_product_set:
+            category_votes[category_id].append(product_number)
             seen_votes.add(key)
 
     top3_per_category = {}
     for category, votes in category_votes.items():
         counts = Counter(votes)
-        top3_per_category[category] = counts.most_common(3)
+        top_votes = counts.most_common(3)
+
+        product_name_map = {
+            num: db_session.query(Product.product_name)
+                        .filter_by(category_id=category, product_number=num)
+                        .scalar()
+            for num, _ in top_votes
+        }
+
+        top3_per_category[category] = [
+            {
+                "product_number": num,
+                "product_name": product_name_map.get(num, "Unknown"),
+                "count": count
+            }
+            for num, count in top_votes
+        ]
 
     db_session.close()
     return top3_per_category
+
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 SERVICE_ACCOUNT_FILE = 'even-flight-463203-v1-a28e0ee1c361.json'
@@ -388,10 +357,14 @@ def export_gsheet():
         row = [product_name, category_id]
         for i in range(3):
             if i < len(top_votes):
-                row.extend([top_votes[i][0], top_votes[i][1]])
+                row.extend([
+                    top_votes[i]["product_number"], 
+                    top_votes[i]["count"]
+                ])
             else:
                 row.extend(["", ""])
         worksheet.append_row(row)
+
 
     sheet_url = spreadsheet.url
     flash(Markup(f"Google Sheets: <a href='{sheet_url}' target='_blank'>{sheet_url}</a>"))

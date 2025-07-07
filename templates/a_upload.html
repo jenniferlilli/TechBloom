@@ -45,7 +45,7 @@
       animation: fadeIn 1.2s ease forwards;
       position: relative;
       z-index: 5;
-      max-width: 1200px;
+      max-width: 700px;
       width: 100%;
       background-color: #fff1f5;
       border-radius: 15px;
@@ -372,187 +372,188 @@
   </div>
   {% endif %}
   {% endwith %}
-<div class="container-wrapper">
-  <h1>Upload Badge ID List, ZIP File, and Product Names</h1>
-  <div class="drop-square">
-    <div id="drop-area-badge" class="drop-area">
-      <p>Badge Identification Document Upload</p>
-      <p>Drop <strong>.csv</strong> or <strong>.txt</strong> here<br />or click to select</p>
-      <input type="file" id="file-input-badge" accept=".csv,.txt" hidden />
-      <button class="upload-btn" onclick="event.stopPropagation(); document.getElementById('file-input-badge').click()">Choose Badge File</button>
-      <p class="file-name" id="badge-file-name"></p>
+
+  <div class="container-wrapper">
+    <h1>Upload Badge ID List and ZIP File</h1>
+    <div class="drop-square">
+      <div id="drop-area-badge" class="drop-area">
+        <p>Badge Identification Document Upload</p>
+        <p>Drop <strong>.csv</strong> or <strong>.txt</strong> here<br />or click to select</p>
+        <input type="file" id="file-input-badge" accept=".csv,.txt" />
+        <button class="upload-btn" onclick="document.getElementById('file-input-badge').click()">Choose Badge File</button>
+        <p class="file-name" id="badge-file-name"></p>
+      </div>
+
+      <div id="drop-area-zip" class="drop-area">
+        <p>Ballot Files Upload</p>
+        <p>Drop <strong>.zip</strong> here<br />or click to select</p>
+        <input type="file" id="file-input-zip" accept=".zip" />
+        <button class="upload-btn" onclick="document.getElementById('file-input-zip').click()">Choose ZIP File</button>
+        <p class="file-name" id="zip-file-name"></p>
+      </div>
     </div>
 
-    <div id="drop-area-zip" class="drop-area">
-      <p>Ballot Files Upload</p>
-      <p>Drop <strong>.zip</strong> here<br />or click to select</p>
-      <input type="file" id="file-input-zip" accept=".zip" hidden />
-      <button class="upload-btn" onclick="event.stopPropagation(); document.getElementById('file-input-zip').click()">Choose ZIP File</button>
-      <p class="file-name" id="zip-file-name"></p>
-    </div>
+<div style="display: flex; justify-content: center;">
+  <button type="submit" onclick="uploadFiles()">Submit Files</button>
+</div>
 
-    <div id="drop-area-excel" class="drop-area">
-      <p>Excel File Upload</p>
-      <p>Drop <strong>.xlsx</strong> here<br />or click to select</p>
-      <input type="file" id="file-input-excel" accept=".xlsx" hidden />
-      <button class="upload-btn" onclick="event.stopPropagation(); document.getElementById('file-input-excel').click()">Choose Excel File</button>
-      <p class="file-name" id="excel-file-name"></p>
-    </div>
+    {% if joined_existing %}
+<button
+  style="background-color: #888; border: none; border-radius: 8px; color: white; font-size: 14px; padding: 14px 20px; max-width: 30rem; cursor: pointer; display: block; margin-left: auto; margin-right: auto;" 
+  onclick="skipUpload()">
+  Skip Upload (Use existing files)
+</button>    {% endif %}
   </div>
-
-  <div style="display: flex; justify-content: center; margin-top: 20px;">
-    <button type="submit" id="submit-btn" onclick="uploadFiles()">Submit Files</button>
-  </div>
-
-  {% if joined_existing %}
-  <button
-    style="background-color: #888; border: none; border-radius: 8px; color: white; font-size: 14px; padding: 14px 20px; max-width: 30rem; cursor: pointer; display: block; margin: 20px auto;"
-    onclick="skipUpload()">
-    Skip Upload (Use existing files)
-  </button>
-  {% endif %}
 
   <img src="{{ url_for('static', filename='light_logo.png') }}" id="bottom-logo" alt="Logo" />
-  <div id="session-id-box" onclick="copySessionId()">
+  <div id="session-id-box" onclick="copySessionId()" style="cursor: pointer;">
   Session ID: <span id="session-id-text">{{ short_session_id }}</span>
-  <span style="font-size: 0.9rem; color: #999; margin-left: 8px;">(click to copy full ID)</span>
+  <span style="font-size: 0.8em; color: #888;">(click to copy full ID)</span>
   </div>
-</div>
-</div>
 
-<script>
-let badgeFile = null;
-let zipFile = null;
-let excelFile = null;
 
-const badgeInput = document.getElementById('file-input-badge');
-const zipInput = document.getElementById('file-input-zip');
-const excelInput = document.getElementById('file-input-excel');
-
-const badgeFileNameDisplay = document.getElementById('badge-file-name');
-const zipFileNameDisplay = document.getElementById('zip-file-name');
-const excelFileNameDisplay = document.getElementById('excel-file-name');
-
-function setupDropArea(area, input, fileCheckFn, onFileSelected) {
-  area.addEventListener('click', () => input.click());
-  ['dragenter', 'dragover'].forEach(event => {
-    area.addEventListener(event, e => {
-      e.preventDefault(); e.stopPropagation(); area.classList.add('highlight');
-    });
-  });
-  ['dragleave', 'drop'].forEach(event => {
-    area.addEventListener(event, e => {
-      e.preventDefault(); e.stopPropagation(); area.classList.remove('highlight');
-    });
-  });
-  area.addEventListener('drop', e => {
-    const file = e.dataTransfer.files[0];
-    if (!fileCheckFn(file)) return alert('Invalid file type.');
-    onFileSelected(file);
-  });
-  input.addEventListener('change', () => {
-    const file = input.files[0];
-    if (!fileCheckFn(file)) return alert('Invalid file type.');
-    onFileSelected(file);
-  });
-}
-
-setupDropArea(
-  document.getElementById('drop-area-badge'),
-  badgeInput,
-  f => f.name.toLowerCase().endsWith('.csv') || f.name.toLowerCase().endsWith('.txt'),
-  file => {
-    badgeFile = file;
-    badgeFileNameDisplay.textContent = `Selected file: ${file.name}`;
-  }
-);
-
-setupDropArea(
-  document.getElementById('drop-area-zip'),
-  zipInput,
-  f => f.name.toLowerCase().endsWith('.zip'),
-  file => {
-    zipFile = file;
-    zipFileNameDisplay.textContent = `Selected file: ${file.name}`;
-  }
-);
-
-setupDropArea(
-  document.getElementById('drop-area-excel'),
-  excelInput,
-  f => f.name.toLowerCase().endsWith('.xlsx'),
-  file => {
-    excelFile = file;
-    excelFileNameDisplay.textContent = `Selected file: ${file.name}`;
-  }
-);
-
-function uploadFiles() {
-  const joinedExisting = {{ 'true' if joined_existing else 'false' }};
-
-  if (!joinedExisting && (!badgeFile || !zipFile || !excelFile)) {
-    alert('Please upload all three files (badge, ZIP, and Excel).');
-    return;
-  }
-
-  const formData = new FormData();
-  if (badgeFile) formData.append('badge_file', badgeFile);
-  if (zipFile) formData.append('zip_file', zipFile);
-  if (excelFile) formData.append('excel_file', excelFile);
-
-  const submitButton = document.getElementById('submit-btn');
-  submitButton.disabled = true;
-  submitButton.textContent = 'Uploading...';
-  submitButton.style.cursor = 'not-allowed';
-
-  fetch("{{ url_for('upload_files') }}", {
-    method: 'POST',
-    body: formData
-  })
-    .then(response => {
-      if (response.redirected) {
-        window.location.href = response.url;
-      } else {
-        return response.text().then(text => {
-          alert('Upload failed. Check server logs.');
-          console.error(text);
-          submitButton.disabled = false;
-          submitButton.textContent = 'Submit Files';
-          submitButton.style.cursor = 'pointer';
-        });
-      }
-    })
-    .catch(error => {
-      alert('Upload error.');
-      console.error(error);
-      submitButton.disabled = false;
-      submitButton.textContent = 'Submit Files';
-      submitButton.style.cursor = 'pointer';
-    });
-}
-
-function skipUpload() {
-  fetch("{{ url_for('upload_files') }}", {
-    method: 'POST',
-    body: new FormData()
-  })
-    .then(response => {
-      if (response.redirected) {
-        window.location.href = response.url;
-      } else {
-        return response.text().then(data => {
-          alert('Skip failed.');
-          console.error(data);
-        });
-      }
-    })
-    .catch(error => {
-      alert('Skip failed.');
-      console.error(error);
-    });
-}
-</script>
   <script>
+    let badgeFile = null;
+    let zipFile = null;
+
+    const badgeArea = document.getElementById('drop-area-badge');
+    const zipArea = document.getElementById('drop-area-zip');
+    const badgeInput = document.getElementById('file-input-badge');
+    const zipInput = document.getElementById('file-input-zip');
+
+    const badgeFileNameDisplay = document.getElementById('badge-file-name');
+    const zipFileNameDisplay = document.getElementById('zip-file-name');
+
+    function isBadgeFile(file) {
+      return file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.txt');
+    }
+
+    function isZipFile(file) {
+      return file.name.toLowerCase().endsWith('.zip');
+    }
+
+    function setupDropArea(area, input, fileCheckFn, onFileSelected) {
+      ['dragenter', 'dragover'].forEach(event => {
+        area.addEventListener(event, e => {
+          e.preventDefault();
+          e.stopPropagation();
+          area.classList.add('highlight');
+        }, false);
+      });
+
+      ['dragleave', 'drop'].forEach(event => {
+        area.addEventListener(event, e => {
+          e.preventDefault();
+          e.stopPropagation();
+          area.classList.remove('highlight');
+        }, false);
+      });
+
+      area.addEventListener('drop', e => {
+        const file = e.dataTransfer.files[0];
+        if (!fileCheckFn(file)) {
+          alert(`Invalid file type.`);
+          return;
+        }
+        onFileSelected(file);
+      });
+
+      input.addEventListener('change', () => {
+        const file = input.files[0];
+        if (!fileCheckFn(file)) {
+          alert(`Invalid file type.`);
+          input.value = '';
+          return;
+        }
+        onFileSelected(file);
+      });
+    }
+
+    setupDropArea(badgeArea, badgeInput, isBadgeFile, file => {
+      badgeFile = file;
+      badgeFileNameDisplay.textContent = `Selected file: ${file.name}`;
+    });
+    setupDropArea(zipArea, zipInput, isZipFile, file => {
+      zipFile = file;
+      zipFileNameDisplay.textContent = `Selected file: ${file.name}`;
+    });
+
+    function uploadFiles() {
+      if (!badgeFile || !zipFile) {
+        alert('Please provide both a badge file and a ZIP file.');
+        return;
+      }
+
+      const submitButton = document.querySelector('button[type="submit"]');
+      submitButton.disabled = true;
+      submitButton.textContent = 'Uploading...';
+      submitButton.style.backgroundColor = '#fddde6';
+      submitButton.style.borderColor = '#fddde6';
+      submitButton.style.color = '#ffffff';
+      submitButton.style.cursor = 'not-allowed';
+
+      const formData = new FormData();
+      formData.append('badge_file', badgeFile);
+      formData.append('zip_file', zipFile);
+
+      fetch("{{ url_for('upload_files') }}", {
+        method: 'POST',
+        body: formData
+      }).then(response => {
+        if (response.redirected) {
+          window.location.href = response.url;
+        } else {
+          return response.text().then(data => {
+            alert('Upload failed. Check server logs or validations.');
+            console.log(data);
+            submitButton.disabled = false;
+            submitButton.textContent = 'Submit Files';
+            submitButton.style.backgroundColor = '#FDBFC9';
+            submitButton.style.borderColor = '#FDBFC9';
+            submitButton.style.color = '#ffffff';
+            submitButton.style.cursor = 'pointer';
+          });
+        }
+      }).catch(error => {
+        console.error('Upload error:', error);
+        alert('Upload failed.');
+        submitButton.disabled = false;
+        submitButton.textContent = 'Submit Files';
+        submitButton.style.backgroundColor = '#FDBFC9';
+        submitButton.style.borderColor = '#FDBFC9';
+        submitButton.style.color = '#ffffff';
+        submitButton.style.cursor = 'pointer';
+      });
+    }
+
+    function navigateBackWithAnimation() {
+      localStorage.setItem('shouldAnimate', 'true');
+
+      if (window.history.length > 1) {
+        window.history.back();
+      } else {
+        window.location.href = "/";
+      }
+    }
+
+    function skipUpload() {
+      fetch("{{ url_for('upload_files') }}", {
+        method: 'POST',
+        body: new FormData()
+      }).then(response => {
+        if (response.redirected) {
+          window.location.href = response.url;
+        } else {
+          return response.text().then(data => {
+            alert('Skip failed. Check server response.');
+            console.log(data);
+          });
+        }
+      }).catch(error => {
+        console.error('Skip error:', error);
+        alert('Skip failed.');
+      });
+    }
 
     setTimeout(() => {
       const flashContainer = document.getElementById('flash-messages');

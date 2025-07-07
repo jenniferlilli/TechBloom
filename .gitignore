@@ -10,9 +10,7 @@ __pycache__/
 *.jpg
 *.jpeg
 *.mp4
-
-# Secrets / credentials
-even-flight-463203-v1-a28e0ee1c361.json
+*.json
 
 # OS files
 .DS_Store

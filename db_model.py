@@ -61,7 +61,6 @@ class BallotVotes(Base):
 class Product(Base):
     __tablename__ = 'products'
     id = Column(Integer, primary_key=True, autoincrement=True)
-    session_id = Column(UUID(as_uuid=True), ForeignKey('sessions.session_id'), nullable=False)
     category_id = Column(String, nullable=False)
     product_number = Column(String, nullable=False)
     product_name = Column(String, nullable=False)
