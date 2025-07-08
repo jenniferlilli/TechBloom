@@ -10,27 +10,12 @@ import json
 import uuid
 from celery_app import make_celery
 
-
-def make_celery():
-    celery = Celery(
-        'tasks',
-        broker=os.environ.get('CELERY_BROKER_URL'),
-        backend=os.environ.get('CELERY_RESULT_BACKEND')
-    )
-    celery.conf.update(
-        task_soft_time_limit=60,
-        task_time_limit=90,
-        worker_concurrency=4,
-        worker_prefetch_multiplier=1,
-        task_acks_late=True,
-    )
-    return celery
+celery = make_celery()
 
 bucket_name = 'techbloom-ballots'
 s3_client = boto3.client('s3')
 
-
-@Celery.task(bind=True)
+@celery.task(bind=True)
 def preprocess_zip_task(self, zip_path, session_id):
     db_session = get_db_session()
     processed_count = 0
