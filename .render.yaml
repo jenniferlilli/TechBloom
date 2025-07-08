@@ -7,7 +7,41 @@ services:
     envVars:
       - key: FLASK_ENV
         value: production
+
+      # Google Cloud service account key (base64-encoded JSON)
+      - key: GOOGLE_CLOUD_KEY_B64
+        sync: false
+
+      # AWS credentials (if using boto3/S3/etc.)
       - key: AWS_ACCESS_KEY_ID
-        value: AKIAX5YQT6QPFF4PLVQB
+        sync: false
       - key: AWS_SECRET_ACCESS_KEY
-        value: 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
+        sync: false
+
+      # Celery configuration
+      - key: CELERY_BROKER_URL
+        sync: false
+      - key: CELERY_RESULT_BACKEND
+        sync: false
+
+  - type: worker
+    name: techbloom-celery
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A tasks.celery worker --loglevel=info --pool=solo
+    envVars:
+      # Google Cloud service account key
+      - key: GOOGLE_CLOUD_KEY_B64
+        sync: false
+
+      # AWS credentials
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+
+      # Celery configuration
+      - key: CELERY_BROKER_URL
+        sync: false
+      - key: CELERY_RESULT_BACKEND
+        sync: false
