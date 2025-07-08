@@ -36,22 +36,13 @@ from google.oauth2.service_account import Credentials
 import random
 from tasks import preprocess_zip_task  
 from flask import jsonify
+from credentials import decode_google_keys
+decode_google_keys()
 s3 = boto3.client('s3')
 bucket_name = 'techbloom-ballots'
 
 app = Flask(__name__, template_folder='.')
 CORS(app)
-
-app.secret_key = 'secret-key'
-alert_b64 = os.getenv("ALERT_JSON_B64")
-if alert_b64:
-    with open("alert-parsec.json", "wb") as f:
-        f.write(base64.b64decode(alert_b64))
-
-even_b64 = os.getenv("EVEN_JSON_B64")
-if even_b64:
-    with open("even-flight.json", "wb") as f:
-        f.write(base64.b64decode(even_b64))
 
 ALLOWED_BADGE_EXTENSIONS = {'csv', 'txt'}
 ALLOWED_ZIP_EXTENSIONS = {'zip'}

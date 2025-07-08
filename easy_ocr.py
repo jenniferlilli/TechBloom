@@ -16,6 +16,8 @@ from db_model import get_db_session, ValidBadgeIDs, Ballot
 from google.oauth2 import service_account
 from google.cloud import vision
 import json
+from credentials import decode_google_keys
+decode_google_keys()
 
 with open("alert-parsec.json", "r") as f:
     credentials_info = json.load(f)
