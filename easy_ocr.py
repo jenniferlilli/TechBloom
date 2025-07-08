@@ -477,7 +477,9 @@ def extract_digits(cell_img, file_name):
             continue
 
         if isinstance(norm_digit, np.ndarray):
+            print(f"Segment {i}: shape={norm_digit.shape}, dtype={norm_digit.dtype}, max={norm_digit.max()}, min={norm_digit.min()}")
             norm_digit = transforms.ToPILImage()(norm_digit)
+            print(f"Segment {i}: successfully converted to PIL")
         elif not isinstance(norm_digit, Image.Image):
             print("Unexpected digit type:", type(norm_digit))
             digits.append('?')
