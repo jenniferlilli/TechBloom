@@ -486,10 +486,10 @@ def extract_digits(cell_img, file_name):
             good_vote = False
             continue
 
-
-        input_tensor = transform(norm_digit).unsqueeze(0)
-        print(f"input_tensor.shape = {input_tensor.shape}")
-        print(f"Segment {i}: input_tensor shape = {input_tensor.shape}, dtype = {input_tensor.dtype}")
+        try:
+            input_tensor = transform(norm_digit).unsqueeze(0)
+        except Exception as e:
+            print(f"[Segment {i}] ERROR: {e}")
     
         device = next(model.parameters()).device
         input_tensor = input_tensor.to(device)
