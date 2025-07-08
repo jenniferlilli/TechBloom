@@ -76,6 +76,16 @@
       box-shadow: 0 0 12px rgba(255, 182, 193, 0.5);
     }
 
+    #flash-message a {
+      color: #ffffff; 
+      text-decoration: underline;
+      font-weight: bold;
+    }
+
+    #flash-message a:hover {
+      color: #ffffff; 
+    }
+
     h1 {
       margin-bottom: 3rem;
       margin-top: 2.5rem;
@@ -263,7 +273,7 @@
     {% with messages = get_flashed_messages() %}
       {% if messages %}
         <div id="flash-message">
-          {{ messages[0] }}
+          {{ messages[0]|safe }}
         </div>
       {% endif %}
     {% endwith %}
@@ -293,7 +303,7 @@
             </tr>
           </thead>
           <tbody>
-            {% for item_number, count in items %}
+            {% for item in items %}
             <tr>
               <td class="placement-cell">
                 {% if loop.index == 1 %} 🥇 1st
@@ -304,16 +314,13 @@
               </td>
               <td class="item-cell">
                 <span class="tooltip">
-                  {% if product_data.get(category) and product_data[category].get(item_number) %}
-                    {{ product_data[category][item_number] }}
-                  {% else %}
-                    {{ item_number }}
-                  {% endif %}
-                  <span class="tooltiptext">{{ count }} votes</span>
+                  {{ item.product_name }}
+                  <span class="tooltiptext">{{ item.count }} votes</span>
                 </span>
               </td>
             </tr>
             {% endfor %}
+
           </tbody>
         </table>
       </div>
