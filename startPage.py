@@ -20,6 +20,7 @@ from db_model import (
     OCRResult,
     BallotVotes,
     SessionLocal,
+    Product
 )
 from db_utils import validate_user_session, insert_user_session, insert_products
 from easy_ocr import process_image, badge_id_exists, readable_badge_id_exists
@@ -232,32 +233,21 @@ def revisit_upload():
 
 @app.route('/dashboard')
 def dashboard():
-    session_id = session.get("session_id")
+    session_id = session.get('session_id')
     if not session_id:
-        flash('Please log in or create a session first.')
+        flash('Please log in first.')
         return redirect(url_for('login'))
 
     top3_per_category = get_top3_votes_by_category(session_id)
-
-    total_votes = sum(len(v) for v in top3_per_category.values())
-    print(f"Session: {session_id}")
-    print(f"Total categories: {len(top3_per_category)}")
-    print(f"Top 3 per category: {top3_per_category}")
-
-    product_data = session.get('product_data', {})
-
-    return render_template("templates/a_dashboard.html",
-                           top3_per_category=top3_per_category,
-                           product_data=product_data)
+    return render_template('templates/a_dashboard.html', top3_per_category=top3_per_category)
 
 
 def get_top3_votes_by_category(session_id):
-    if isinstance(session_id, uuid.UUID):
-        session_uuid = session_id
-    else:
-        session_uuid = uuid.UUID(session_id)
-
+    session_uuid = uuid.UUID(session_id)
     db_session = get_db_session()
+
+    valid_products = db_session.query(Product.category_id, Product.product_number).all()
+    valid_product_set = set((cat.upper(), num.strip()) for cat, num in valid_products)
 
     vote_records = (
         db_session.query(BallotVotes)
@@ -273,24 +263,44 @@ def get_top3_votes_by_category(session_id):
     )
 
     category_votes = defaultdict(list)
-    seen_votes = set()  
+    seen_votes = set()
 
     for vote in vote_records:
         if not vote.category_id or not vote.vote:
             continue
 
-        key = (vote.badge_id, vote.category_id.upper(), vote.vote.strip())
-        if key not in seen_votes:
-            category_votes[vote.category_id.upper()].append(vote.vote.strip())
+        category_id = vote.category_id.upper()
+        product_number = vote.vote.strip()
+        key = (vote.badge_id, category_id, product_number)
+
+        if key not in seen_votes and (category_id, product_number) in valid_product_set:
+            category_votes[category_id].append(product_number)
             seen_votes.add(key)
 
     top3_per_category = {}
     for category, votes in category_votes.items():
         counts = Counter(votes)
-        top3_per_category[category] = counts.most_common(3)
+        top_votes = counts.most_common(3)
+
+        product_name_map = {
+            num: db_session.query(Product.product_name)
+                        .filter_by(category_id=category, product_number=num)
+                        .scalar()
+            for num, _ in top_votes
+        }
+
+        top3_per_category[category] = [
+            {
+                "product_number": num,
+                "product_name": product_name_map.get(num, "Unknown"),
+                "count": count
+            }
+            for num, count in top_votes
+        ]
 
     db_session.close()
     return top3_per_category
+
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 SERVICE_ACCOUNT_FILE = 'even-flight-463203-v1-a28e0ee1c361.json'
@@ -343,15 +353,18 @@ def export_gsheet():
         row = [product_name, category_id]
         for i in range(3):
             if i < len(top_votes):
-                row.extend([top_votes[i][0], top_votes[i][1]])
+                row.extend([
+                    top_votes[i]["product_number"], 
+                    top_votes[i]["count"]
+                ])
             else:
                 row.extend(["", ""])
         worksheet.append_row(row)
 
+
     sheet_url = spreadsheet.url
     flash(Markup(f"Google Sheets: <a href='{sheet_url}' target='_blank'>{sheet_url}</a>"))
     return redirect(url_for('dashboard'))
-
 
 
 @app.route('/review')
