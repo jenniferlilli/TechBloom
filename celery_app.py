@@ -10,7 +10,6 @@ def make_celery():
 
     if not broker_url:
         raise ValueError("CELERY_BROKER_URL environment variable not set")
-    # backend can be optional if you don't use results
 
     celery = Celery(
         'tasks',
