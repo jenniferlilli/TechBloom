@@ -19,7 +19,7 @@ import json
 from credentials import decode_google_keys
 decode_google_keys()
 
-with open("alert-parsec.json", "r") as f:
+with open("even-flight.json", "r") as f:
     credentials_info = json.load(f)
 
 credentials = service_account.Credentials.from_service_account_info(credentials_info)
