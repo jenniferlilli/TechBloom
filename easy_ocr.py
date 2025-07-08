@@ -465,6 +465,7 @@ def extract_digits(cell_img, file_name):
     segment_width = w // 3
     digits = []
     good_vote = True
+
     for i in range(3):
         start_x = i * segment_width
         end_x = (i + 1) * segment_width if i < 2 else w
@@ -472,43 +473,52 @@ def extract_digits(cell_img, file_name):
 
         norm_digit = extract_and_normalize_largest_digit(digit_img)
         print(f"Segment {i} norm_digit is None: {norm_digit is None}")
+
         if norm_digit is None:
+            print(f"Segment {i}: norm_digit is None; marking '?'")
             digits.append('?')
+            good_vote = False
             continue
-        if norm_digit is not None:
 
-            if isinstance(norm_digit, np.ndarray):
-                norm_digit = transforms.ToPILImage()(norm_digit)
-            elif not isinstance(norm_digit, Image.Image):
-                print("Unexpected digit type:", type(norm_digit))
-                digits.append('?')
-                continue
-
-            input_tensor = transform(norm_digit).unsqueeze(0)
-
-            device = next(model.parameters()).device
-            input_tensor = input_tensor.to(device)
-            with torch.no_grad():
-                output = model(input_tensor)
-                probabilities = F.softmax(output, dim=1)[0].cpu().numpy()
-
-            pred_class = int(np.argmax(probabilities))
-            confidence = probabilities[pred_class]
-
-            print(f"Segment {i} predicted digit: {pred_class}")
-            print(f"Segment {i} confidences: " + ", ".join(f"{d}:{p:.2f}" for d, p in enumerate(probabilities)))
-            if confidence < 0.5:
-                digits.append('?')
-                good_vote = False
-            else:
-                digits.append(str(pred_class))
-        else:
-            print(f"No digit extracted for segment {i}")
+        if isinstance(norm_digit, np.ndarray):
+            norm_digit = transforms.ToPILImage()(norm_digit)
+        elif not isinstance(norm_digit, Image.Image):
+            print("Unexpected digit type:", type(norm_digit))
             digits.append('?')
-    final = ''.join(digits)
-    print(f"Full 3-digit result: {final}")
-    return final
+            good_vote = False
+            continue
 
+        input_tensor = transform(norm_digit).unsqueeze(0)
+        device = next(model.parameters()).device
+        input_tensor = input_tensor.to(device)
+
+        with torch.no_grad():
+            output = model(input_tensor)
+            probabilities = F.softmax(output, dim=1)[0].cpu().numpy()
+
+        pred_class = int(np.argmax(probabilities))
+        confidence = probabilities[pred_class]
+
+        print(f"Segment {i} predicted digit: {pred_class} with conf {confidence:.2f}")
+        print(f"Segment {i} confidences: " + ", ".join(f"{d}:{p:.2f}" for d, p in enumerate(probabilities)))
+
+        if int(pred_class) in {1, 4, 5}:
+            print(f"Segment {i}: digit {pred_class} is excluded; marking '?'")
+            digits.append('?')
+            good_vote = False
+        elif confidence > 0.5:
+            digits.append(str(pred_class))
+        else:
+            print(f"Segment {i}: low confidence; marking '?'")
+            digits.append('?')
+            good_vote = False
+
+    final = ''.join(digits)
+    print(f"Full 3-digit result: {final}, good_vote={good_vote}")
+    return final, good_vote
+
+
+    
 def extract_text_from_cells(image, file_name):
     extracted = []
     item_numbers = []
@@ -519,15 +529,16 @@ def extract_text_from_cells(image, file_name):
         "PA", "Q", "QA", "R", "RA", "S", "T", "U", "V",
         "W", "WA", "X", "Y", "YA"
     ]
+
     cropped_cells, badge_id, key = find_main_rectangles(image, file_name)
     if cropped_cells is not None:
         for i, cell_img in enumerate(cropped_cells):
-            current = extract_digits(cell_img, file_name)
+            current, good_vote = extract_digits(cell_img, file_name)
             cat_id = CATEGORY_IDS[i]
             item_numbers.append(current)
-            if len(current) == 3 and "?" not in current:
+
+            if good_vote and len(current) == 3:
                 key = ""
-                print(f"Processing cell {current} and {cat_id}, valid vote: {current}")
                 extracted.append({
                     'Category ID': cat_id,
                     'Item Number': current,
@@ -543,7 +554,9 @@ def extract_text_from_cells(image, file_name):
                     'Status': 'unreadable',
                     'Key': key
                 })
+
     return extracted, badge_id, key
+
 
 def process_image(image_bytes, file_name):
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
