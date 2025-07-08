@@ -1,5 +1,6 @@
 import zipfile
 import os
+import uuid
 import json
 from io import BytesIO
 from celery_app import make_celery
@@ -8,24 +9,22 @@ from db_model import get_db_session, Ballot, OCRResult, BallotVotes
 import boto3
 
 celery = make_celery()
-
 bucket_name = 'techbloom-ballots'
 s3_client = boto3.client('s3')
 
 @celery.task(bind=True)
-def preprocess_zip_task(self, zip_s3_key, session_id):
+def preprocess_zip_task(self, zip_key, session_id):
+    print(f"[Celery] Got session_id: {session_id}")
     db_session = get_db_session()
     processed_count = 0
-    session_uuid = str(session_id)
-
-    tmp_zip_path = f"/tmp/{os.path.basename(zip_s3_key)}"
 
     try:
-        print(f"[Celery] Downloading ZIP from S3: {zip_s3_key}")
-        # Download ZIP file from S3 to /tmp
-        s3_client.download_file(bucket_name, zip_s3_key, tmp_zip_path)
+        session_uuid = uuid.UUID(session_id)
+        print(f"[Celery] Downloading ZIP from S3: {zip_key}")
+        s3_object = s3_client.get_object(Bucket=bucket_name, Key=zip_key)
+        zip_bytes = s3_object['Body'].read()
 
-        with zipfile.ZipFile(tmp_zip_path, 'r') as archive:
+        with zipfile.ZipFile(BytesIO(zip_bytes), 'r') as archive:
             for file_info in archive.infolist():
                 if not file_info.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
                     continue
@@ -38,6 +37,8 @@ def preprocess_zip_task(self, zip_s3_key, session_id):
                 badge_id = result['badge_id']
                 badge_key = result['badge_key']
                 ocr_result = result['items']
+
+                print(f"[Celery] OCR result items: {ocr_result}")
 
                 if badge_key == "" and (badge_id_exists(session_uuid, badge_id) and not readable_badge_id_exists(session_uuid, badge_id)):
                     validity = True
@@ -58,7 +59,7 @@ def preprocess_zip_task(self, zip_s3_key, session_id):
                     validity=validity
                 )
                 db_session.add(ballot)
-                db_session.flush()
+                db_session.flush()  # get ballot.id
 
                 vote_objects = []
                 for item in ocr_result:
@@ -80,10 +81,11 @@ def preprocess_zip_task(self, zip_s3_key, session_id):
                     extracted_text=json.dumps(ocr_result)
                 ))
 
+                print(f"[Celery] Added Ballot and votes for: {file_info.filename}")
                 db_session.commit()
                 processed_count += 1
 
-        print(f"[Celery] Done processing ZIP: {zip_s3_key}, total processed: {processed_count}")
+        print(f"[Celery] Finished processing. Count: {processed_count}")
         return {'status': 'completed', 'processed_count': processed_count}
 
     except Exception as e:
@@ -93,5 +95,3 @@ def preprocess_zip_task(self, zip_s3_key, session_id):
 
     finally:
         db_session.close()
-        if os.path.exists(tmp_zip_path):
-            os.remove(tmp_zip_path)
