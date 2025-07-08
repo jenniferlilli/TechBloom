@@ -19,8 +19,8 @@ def make_celery():
     )
 
     celery.conf.update(
-        task_soft_time_limit=60,
-        task_time_limit=90,
+        task_soft_time_limit=300,
+        task_time_limit=360,
         worker_concurrency=4,
         worker_prefetch_multiplier=1,
         task_acks_late=True,
