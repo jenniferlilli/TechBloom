@@ -485,8 +485,14 @@ def extract_digits(cell_img, file_name):
             digits.append('?')
             good_vote = False
             continue
+        print(f"Segment {i}: PIL image mode = {norm_digit.mode}")
+        print(f"input_tensor shape: {input_tensor.shape}, dtype: {input_tensor.dtype}")
+        if norm_digit.mode != "L":
+            print(f"WARNING: Segment {i} image is mode {norm_digit.mode}, converting to L")
+            norm_digit = norm_digit.convert("L")
 
         input_tensor = transform(norm_digit).unsqueeze(0)
+        print(f"Segment {i}: input_tensor shape: {input_tensor.shape}")
         device = next(model.parameters()).device
         input_tensor = input_tensor.to(device)
 
