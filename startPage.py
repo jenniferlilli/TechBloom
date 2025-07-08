@@ -42,6 +42,7 @@ s3 = boto3.client('s3')
 bucket_name = 'techbloom-ballots'
 
 app = Flask(__name__, template_folder='.')
+app.secret_key = os.getenv("FLASK_SECRET_KEY")
 CORS(app)
 
 ALLOWED_BADGE_EXTENSIONS = {'csv', 'txt'}
