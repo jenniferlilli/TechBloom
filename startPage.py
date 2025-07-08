@@ -307,7 +307,7 @@ def get_top3_votes_by_category(session_id):
 
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-SERVICE_ACCOUNT_FILE = 'even-flight.json"'
+SERVICE_ACCOUNT_FILE = 'even-flight.json'
 category_to_name = {"A":"Freshwater Rods","B":"Saltwater Rods","C":"Rod & Reel Combo","D":"Freshwater Reels","E":"Saltwater Reels","G":"Freshwater Soft Lures","H":"Saltwater Soft Lures","I":"Freshwater Hard Lures","J":"Saltwater Hard Lures","F":"Fly Fishing Rods","FA":"Fly Fishing Reels","FB":"Fly Fishing Rod & Reel Combo","FC":"Fly Fishing Waders & Wading Boots","FD":"Fly Lines, Leaders, Tippet & Line Accessories","FE":"Fly Fishing Technical & General Apparel","FF":"Fly Tying Vise, Tool & Material","FG":"Fly Fishing Backpacks, Bag & Luggage","FH":"Fly Fishing Tool & Accessories","K":"Fishing Line","KA":"Terminal Tackle","KB":"Tackle Management","KC":"Kids’ Tackle","L":"Fishing Accessories","M":"Cutlery, Hand Pliers or Tools","N":"Soft and Hard Coolers","O":"Custom Tackle & Components","P":"Cold Weather Technical Apparel for Men","PA":"Cold Weather Technical Apparel for Women","Q":"Warm Weather Technical Apparel for Men","QA":"Warm Weather Technical Apparel for Women","R":"Lifestyle Apparel for Men","RA":"Lifestyle Apparel for Women","S":"Footwear","T":"Eyewear","U":"Novelties & Wellness","V":"Boats & Watercraft","W":"Motorized Boating Accessories","WA":"Non Motorized Boating Accessories","X":"Ice Fishing","Y":"Electronics","YA":"Energy"}
 
 def get_gsheet_client():
