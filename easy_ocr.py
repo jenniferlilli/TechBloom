@@ -28,13 +28,7 @@ client = vision.ImageAnnotatorClient(credentials=credentials)
 
 model = timm.create_model("resnet18", pretrained=False, num_classes=10)
 model.conv1 = torch.nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
-model.load_state_dict(
-    torch.hub.load_state_dict_from_url(
-        "https://huggingface.co/gpcarl123/resnet18_mnist/resolve/main/resnet18_mnist.pth",
-        map_location="cpu",
-        file_name="resnet18_mnist.pth",
-    )
-)
+model.load_state_dict(torch.load("resnet18_mnist.pth", map_location="cpu"))
 model.eval()
 
 transform = transforms.Compose([
