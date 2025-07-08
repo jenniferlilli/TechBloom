@@ -485,16 +485,14 @@ def extract_digits(cell_img, file_name):
             digits.append('?')
             good_vote = False
             continue
-        print(f"Segment {i}: PIL image mode = {norm_digit.mode}")
-        print(f"input_tensor shape: {input_tensor.shape}, dtype: {input_tensor.dtype}")
-        if norm_digit.mode != "L":
-            print(f"WARNING: Segment {i} image is mode {norm_digit.mode}, converting to L")
-            norm_digit = norm_digit.convert("L")
 
-        input_tensor = transform(norm_digit).unsqueeze(0)
-        print(f"Segment {i}: input_tensor shape: {input_tensor.shape}")
-        device = next(model.parameters()).device
-        input_tensor = input_tensor.to(device)
+
+        try:
+            input_tensor = transform(norm_digit).unsqueeze(0)
+            print(f"Segment {i}: input_tensor shape = {input_tensor.shape}, dtype = {input_tensor.dtype}")
+    
+            device = next(model.parameters()).device
+            input_tensor = input_tensor.to(device)
 
         with torch.no_grad():
             output = model(input_tensor)
@@ -505,6 +503,10 @@ def extract_digits(cell_img, file_name):
 
         print(f"Segment {i} predicted digit: {pred_class} with conf {confidence:.2f}")
         print(f"Segment {i} confidences: " + ", ".join(f"{d}:{p:.2f}" for d, p in enumerate(probabilities)))
+
+        except Exception as e:
+            print(f"[Segment {i}] ERROR during prediction: {e}")
+
 
         if int(pred_class) in {1, 4, 5}:
             print(f"Segment {i}: digit {pred_class} is excluded; marking '?'")
