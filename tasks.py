@@ -19,6 +19,7 @@ def preprocess_zip_task(self, zip_s3_key, session_id):
     session_uuid = str(session_id)
 
     tmp_zip_path = f"/tmp/{os.path.basename(zip_s3_key)}"
+    print(f"[Celery] Got session_id: {session_id}"
 
     try:
         print(f"[Celery] Downloading ZIP from S3: {zip_s3_key}")
