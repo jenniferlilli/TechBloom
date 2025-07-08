@@ -153,7 +153,6 @@ def upload_files():
         badgeFile = request.files.get('badge_file')
         zipFile = request.files.get('zip_file')
 
-        # allow skip if nothing selected, but only if joined_existing
         if not badgeFile and not zipFile:
             if joined_existing:
                 flash('No new files selected. Using existing files.')
@@ -192,20 +191,10 @@ def upload_files():
                 db_session.commit()
 
                 try:
-                    UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads')
-                    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-                    local_zip_path = os.path.join(UPLOAD_FOLDER, filename)
-                    with open(local_zip_path, "wb") as f:
-                        f.write(zip_bytes)
-
-                    preprocess_zip_task.delay(local_zip_path, session_id)
-                    flash("ZIP file uploaded. Processing started in background.")
-                except zipfile.BadZipFile:
-                    flash('Invalid ZIP file.')
-                    db_session.close()
-                    return redirect(request.url)
+                    preprocess_zip_task.delay(zip_key, session_id)
+                    flash("ZIP file uploaded to S3. Processing started in background.")
                 except Exception as e:
-                    flash(f'Error saving or processing ZIP: {str(e)}')
+                    flash(f'Error starting background task: {str(e)}')
                     db_session.close()
                     return redirect(request.url)
             else:
