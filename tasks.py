@@ -21,7 +21,8 @@ def preprocess_zip_task(self, zip_path, session_id):
     db_session = get_db_session()
     processed_count = 0
 
-    session_uuid = uuid.UUID(str(session_id))
+    session_uuid = str(session_id)
+
 
     try:
         with zipfile.ZipFile(zip_path, 'r') as archive:
@@ -78,6 +79,7 @@ def preprocess_zip_task(self, zip_path, session_id):
                     filename=file_info.filename,
                     extracted_text=json.dumps(ocr_result)
                 ))
+
 
                 db_session.commit()
                 processed_count += 1
