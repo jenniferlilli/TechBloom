@@ -277,8 +277,11 @@ def get_top3_votes_by_category(session_id):
             category_votes[category_id].append(product_number)
             seen_votes.add(key)
 
+    all_categories = sorted(set(cat.upper() for cat, _ in valid_products))
+
     top3_per_category = {}
-    for category, votes in category_votes.items():
+    for category in all_categories:
+        votes = category_votes.get(category, [])
         counts = Counter(votes)
         top_votes = counts.most_common(3)
 
