@@ -30,7 +30,7 @@ bucket_name = 'techbloom-ballots'
 s3_client = boto3.client('s3')
 
 
-@celery.task(bind=True)
+@Celery.task(bind=True)
 def preprocess_zip_task(self, zip_path, session_id):
     db_session = get_db_session()
     processed_count = 0
