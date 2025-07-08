@@ -538,21 +538,21 @@ def extract_text_from_cells(image, file_name):
             item_numbers.append(current)
 
             if good_vote and len(current) == 3:
-                key = ""
+                vote_key = ""
                 extracted.append({
                     'Category ID': cat_id,
                     'Item Number': current,
                     'Status': 'readable',
-                    'Key': key
+                    'Key': vote_key
                 })
             else:
-                key = upload_vote_to_s3(cell_img, file_name, cat_id)
+                vote_key = upload_vote_to_s3(cell_img, file_name, cat_id)
                 print(f"Invalid vote cell {current} and {cat_id}, uploading to S3: {current}")
                 extracted.append({
                     'Category ID': cat_id,
                     'Item Number': current,
                     'Status': 'unreadable',
-                    'Key': key
+                    'Key': vote_key
                 })
 
     return extracted, badge_id, key
