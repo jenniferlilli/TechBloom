@@ -1,4 +1,4 @@
-import os
+import os, base64
 import boto3
 import json
 import re
@@ -41,13 +41,22 @@ bucket_name = 'techbloom-ballots'
 
 app = Flask(__name__, template_folder='.')
 CORS(app)
+
 app.secret_key = 'secret-key'
+alert_b64 = os.getenv("ALERT_JSON_B64")
+if alert_b64:
+    with open("alert-parsec.json", "wb") as f:
+        f.write(base64.b64decode(alert_b64))
+
+even_b64 = os.getenv("EVEN_JSON_B64")
+if even_b64:
+    with open("even-flight.json", "wb") as f:
+        f.write(base64.b64decode(even_b64))
 
 ALLOWED_BADGE_EXTENSIONS = {'csv', 'txt'}
 ALLOWED_ZIP_EXTENSIONS = {'zip'}
 
 from celery_app import make_celery
-
 celery = make_celery()
 
 def get_db_session():
@@ -306,7 +315,7 @@ def get_top3_votes_by_category(session_id):
 
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-SERVICE_ACCOUNT_FILE = 'even-flight-463203-v1-a28e0ee1c361.json'
+SERVICE_ACCOUNT_FILE = 'even-flight.json"'
 category_to_name = {"A":"Freshwater Rods","B":"Saltwater Rods","C":"Rod & Reel Combo","D":"Freshwater Reels","E":"Saltwater Reels","G":"Freshwater Soft Lures","H":"Saltwater Soft Lures","I":"Freshwater Hard Lures","J":"Saltwater Hard Lures","F":"Fly Fishing Rods","FA":"Fly Fishing Reels","FB":"Fly Fishing Rod & Reel Combo","FC":"Fly Fishing Waders & Wading Boots","FD":"Fly Lines, Leaders, Tippet & Line Accessories","FE":"Fly Fishing Technical & General Apparel","FF":"Fly Tying Vise, Tool & Material","FG":"Fly Fishing Backpacks, Bag & Luggage","FH":"Fly Fishing Tool & Accessories","K":"Fishing Line","KA":"Terminal Tackle","KB":"Tackle Management","KC":"Kids’ Tackle","L":"Fishing Accessories","M":"Cutlery, Hand Pliers or Tools","N":"Soft and Hard Coolers","O":"Custom Tackle & Components","P":"Cold Weather Technical Apparel for Men","PA":"Cold Weather Technical Apparel for Women","Q":"Warm Weather Technical Apparel for Men","QA":"Warm Weather Technical Apparel for Women","R":"Lifestyle Apparel for Men","RA":"Lifestyle Apparel for Women","S":"Footwear","T":"Eyewear","U":"Novelties & Wellness","V":"Boats & Watercraft","W":"Motorized Boating Accessories","WA":"Non Motorized Boating Accessories","X":"Ice Fishing","Y":"Electronics","YA":"Energy"}
 
 def get_gsheet_client():

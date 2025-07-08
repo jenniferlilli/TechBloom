@@ -17,7 +17,7 @@ from google.oauth2 import service_account
 from google.cloud import vision
 import json
 
-with open("alert-parsec-464721-v0-0b6d7b3d37d5.json", "r") as f:
+with open("alert-parsec.json", "r") as f:
     credentials_info = json.load(f)
 
 credentials = service_account.Credentials.from_service_account_info(credentials_info)
