@@ -26,10 +26,18 @@ credentials = service_account.Credentials.from_service_account_info(credentials_
 client = vision.ImageAnnotatorClient(credentials=credentials)
 
 
-model = timm.create_model("resnet18", pretrained=False, num_classes=10)
-model.conv1 = torch.nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
-model.load_state_dict(torch.load("resnet18_mnist.pth", map_location="cpu"))
-model.eval()
+def load_model():
+    model = timm.create_model("resnet18", pretrained=False, num_classes=10)
+    model.conv1 = torch.nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+    model.load_state_dict(
+        torch.hub.load_state_dict_from_url(
+            "https://huggingface.co/gpcarl123/resnet18_mnist/resolve/main/resnet18_mnist.pth",
+            map_location="cpu",
+            file_name="resnet18_mnist.pth",
+        )
+    )
+    model.eval()
+    return model
 
 transform = transforms.Compose([
     transforms.ToTensor(),
@@ -456,7 +464,7 @@ def find_main_rectangles(img, file_name):
                 cell_add_count += 1
     return cropped_cells, badge_id, key
 
-def extract_digits(cell_img, file_name):
+def extract_digits(cell_img, file_name, model):
     h, w = cell_img.shape[:2]
     segment_width = w // 3
     digits = []
@@ -534,7 +542,7 @@ def extract_digits(cell_img, file_name):
 
 
     
-def extract_text_from_cells(image, file_name):
+def extract_text_from_cells(image, file_name, model):
     extracted = []
     item_numbers = []
     CATEGORY_IDS = [
@@ -548,7 +556,7 @@ def extract_text_from_cells(image, file_name):
     cropped_cells, badge_id, key = find_main_rectangles(image, file_name)
     if cropped_cells is not None:
         for i, cell_img in enumerate(cropped_cells):
-            current, good_vote = extract_digits(cell_img, file_name)
+            current, good_vote = extract_digits(cell_img, file_name, model)
             cat_id = CATEGORY_IDS[i]
             item_numbers.append(current)
 
@@ -578,7 +586,7 @@ def process_image(image_bytes, file_name):
     image_np = np.array(image)
     image_cv = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
 
-    item_extract, badge_id, key = extract_text_from_cells(image_cv, file_name)
+    item_extract, badge_id, key = extract_text_from_cells(image_cv, file_name, model)
 
     print(f"Extracted Badge ID: {badge_id}")
 
