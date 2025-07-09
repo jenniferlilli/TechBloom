@@ -493,35 +493,23 @@ def extract_digits(cell_img, file_name, model):
             continue
 
         if isinstance(norm_digit, np.ndarray):
-            print(f"Segment {i}: shape={norm_digit.shape}, dtype={norm_digit.dtype}, max={norm_digit.max()}, min={norm_digit.min()}")
             norm_digit = transforms.ToPILImage()(norm_digit)
-            print(f"Segment {i}: successfully converted to PIL")
         elif not isinstance(norm_digit, Image.Image):
-            print("Unexpected digit type:", type(norm_digit))
             digits.append('?')
             good_vote = False
             continue
 
         try:
-            print(f"Segment {i}: starting transform")
             input_tensor = transform(norm_digit).unsqueeze(0)
-            print(f"Segment {i}: transform done")
             device = next(model.parameters()).device
-            print(f"Segment {i}: model device = {device}")
             input_tensor = input_tensor.to(device)
-            print(f"Segment {i}: input_tensor sent to device")
 
             with torch.no_grad():
-                print(f"Segment {i}: running model inference")
                 output = model(input_tensor)
-                print(f"Segment {i}: inference done")
                 probabilities = F.softmax(output, dim=1)[0].cpu().numpy()
-                print(f"Segment {i}: softmax + cpu done")
         
             pred_class = int(np.argmax(probabilities))
-            print(f"Segment {i}: prob done")
             confidence = probabilities[pred_class]
-            print(f"Segment {i}: confidence done")
         
             print(f"Segment {i} predicted digit: {pred_class} with conf {confidence:.2f}")
             print(f"Segment {i} confidences: " + ", ".join(f"{d}:{p:.2f}" for d, p in enumerate(probabilities)))
