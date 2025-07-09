@@ -21,7 +21,7 @@ def preprocess_zip_task(self, zip_key, session_id):
     model = get_model()
 
     try:
-        session_uuid = uuid.UUID(str((session_id))
+        session_uuid = uuid.UUID(str((session_id)))
         print(f"[Celery] Downloading ZIP from S3: {zip_key}")
         s3_object = s3_client.get_object(Bucket=bucket_name, Key=zip_key)
         zip_bytes = s3_object['Body'].read()
