@@ -38,7 +38,7 @@ from tasks import preprocess_zip_task
 from flask import jsonify
 from credentials import decode_google_keys
 decode_google_keys()
-s3 = boto3.client('s3')
+s3 = boto3.client('s3', region_name='us-east-2')
 bucket_name = 'techbloom-ballots'
 
 app = Flask(__name__, template_folder='.')
