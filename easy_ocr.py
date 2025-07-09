@@ -39,6 +39,14 @@ def load_model():
     model.eval()
     return model
 
+_model = None
+
+def get_model():
+    global _model
+    if _model is None:
+        _model = load_model()
+    return _model
+
 transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize((0.1307,), (0.3081,))
