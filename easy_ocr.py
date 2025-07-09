@@ -589,7 +589,7 @@ def extract_text_from_cells(image, file_name, model):
     return extracted, badge_id, key
 
 
-def process_image(image_bytes, file_name):
+def process_image(image_bytes, file_name, model):
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     image_np = np.array(image)
     image_cv = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
