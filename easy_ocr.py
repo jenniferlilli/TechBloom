@@ -496,11 +496,16 @@ def extract_digits(cell_img, file_name):
             print(f"Segment {i}: input_tensor sent to device")
 
             with torch.no_grad():
+                print(f"Segment {i}: running model inference")
                 output = model(input_tensor)
+                print(f"Segment {i}: inference done")
                 probabilities = F.softmax(output, dim=1)[0].cpu().numpy()
+                print(f"Segment {i}: softmax + cpu done")
         
             pred_class = int(np.argmax(probabilities))
+            print(f"Segment {i}: prob done")
             confidence = probabilities[pred_class]
+            print(f"Segment {i}: confidence done")
         
             print(f"Segment {i} predicted digit: {pred_class} with conf {confidence:.2f}")
             print(f"Segment {i} confidences: " + ", ".join(f"{d}:{p:.2f}" for d, p in enumerate(probabilities)))
