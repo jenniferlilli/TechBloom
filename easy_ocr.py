@@ -488,33 +488,36 @@ def extract_digits(cell_img, file_name):
 
         try:
             input_tensor = transform(norm_digit).unsqueeze(0)
+            device = next(model.parameters()).device
+            input_tensor = input_tensor.to(device)
+
+            with torch.no_grad():
+                output = model(input_tensor)
+                probabilities = F.softmax(output, dim=1)[0].cpu().numpy()
+        
+            pred_class = int(np.argmax(probabilities))
+            confidence = probabilities[pred_class]
+        
+            print(f"Segment {i} predicted digit: {pred_class} with conf {confidence:.2f}")
+            print(f"Segment {i} confidences: " + ", ".join(f"{d}:{p:.2f}" for d, p in enumerate(probabilities)))
+        
+        
+            if int(pred_class) in {1, 4, 5}:
+                print(f"Segment {i}: digit {pred_class} is excluded; marking '?'")
+                digits.append('?')
+                good_vote = False
+            elif confidence > 0.5:
+                digits.append(str(pred_class))
+            else:
+                print(f"Segment {i}: low confidence; marking '?'")
+                digits.append('?')
+                good_vote = False
         except Exception as e:
             print(f"[Segment {i}] ERROR: {e}")
+            digits.append('?')
+            good_vote = False
     
-        device = next(model.parameters()).device
-        input_tensor = input_tensor.to(device)
-
-        with torch.no_grad():
-            output = model(input_tensor)
-            probabilities = F.softmax(output, dim=1)[0].cpu().numpy()
-
-        pred_class = int(np.argmax(probabilities))
-        confidence = probabilities[pred_class]
-
-        print(f"Segment {i} predicted digit: {pred_class} with conf {confidence:.2f}")
-        print(f"Segment {i} confidences: " + ", ".join(f"{d}:{p:.2f}" for d, p in enumerate(probabilities)))
-
-
-        if int(pred_class) in {1, 4, 5}:
-            print(f"Segment {i}: digit {pred_class} is excluded; marking '?'")
-            digits.append('?')
-            good_vote = False
-        elif confidence > 0.5:
-            digits.append(str(pred_class))
-        else:
-            print(f"Segment {i}: low confidence; marking '?'")
-            digits.append('?')
-            good_vote = False
+        
 
     final = ''.join(digits)
     print(f"Full 3-digit result: {final}, good_vote={good_vote}")
