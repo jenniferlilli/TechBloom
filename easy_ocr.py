@@ -55,7 +55,7 @@ transform = transforms.Compose([
 def badge_id_exists(session_id: str, badge_id: str) -> bool:
     session = get_db_session()
     try:
-        session_id = uuid.UUID(session_id)
+        session_id = uuid.UUID(str(session_id))
         exists = session.query(ValidBadgeIDs).filter(
             ValidBadgeIDs.session_id == session_id,
             ValidBadgeIDs.badge_id == badge_id
@@ -67,7 +67,7 @@ def badge_id_exists(session_id: str, badge_id: str) -> bool:
 def readable_badge_id_exists(session_id: str, badge_id: str) -> bool:
     session = get_db_session()
     try:
-        session_id = uuid.UUID(session_id)
+        session_id = uuid.UUID(str(session_id))
         exists = session.query(Ballot).filter(
             Ballot.session_id == session_id,
             Ballot.badge_id == badge_id,
