@@ -6,7 +6,7 @@ from io import BytesIO
 from celery_app import make_celery
 from easy_ocr import process_image, readable_badge_id_exists, badge_id_exists
 from db_model import get_db_session, Ballot, OCRResult, BallotVotes
-from easy_ocr import load_model
+from easy_ocr import get_model
 import boto3
 
 celery = make_celery()
@@ -18,6 +18,7 @@ def preprocess_zip_task(self, zip_key, session_id):
     print(f"[Celery] Got session_id: {session_id}")
     db_session = get_db_session()
     processed_count = 0
+    model = get_model()
 
     try:
         session_uuid = uuid.UUID(session_id)
@@ -33,7 +34,6 @@ def preprocess_zip_task(self, zip_key, session_id):
                 print(f"[Celery] Processing image: {file_info.filename}")
                 with archive.open(file_info) as image_file:
                     image_data = image_file.read()
-                model = load_model()
                 result = process_image(image_data, file_info.filename, model)
                 badge_id = result['badge_id']
                 badge_key = result['badge_key']
