@@ -487,9 +487,13 @@ def extract_digits(cell_img, file_name):
             continue
 
         try:
+            print(f"Segment {i}: starting transform")
             input_tensor = transform(norm_digit).unsqueeze(0)
+            print(f"Segment {i}: transform done")
             device = next(model.parameters()).device
+            print(f"Segment {i}: model device = {device}")
             input_tensor = input_tensor.to(device)
+            print(f"Segment {i}: input_tensor sent to device")
 
             with torch.no_grad():
                 output = model(input_tensor)
