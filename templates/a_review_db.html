@@ -303,7 +303,7 @@
   <div class="square">
     <h1>Review Dashboard</h1>
     <div class="button-row">
-      <button onclick="location.href='{{ url_for('upload_files') }}'">Go to Upload Files</button>
+      <button onclick="location.href='{{ url_for('revisit_upload') }}'">Go to Upload Files</button>
       <button onclick="location.href='{{ url_for('dashboard') }}'">Go to Dashboard</button>
     </div>
 
@@ -331,7 +331,7 @@
                       <input type="hidden" name="id" value="{{ badge.id }}">
                       <input type="text" name="badge_id" placeholder="Enter badge ID" required class="vote-input"
                              onkeydown="if(event.key==='Enter'){this.form.submit();}"
-                             pattern="\d{5}" title="Please enter exactly 5 digits" maxlength="5" inputmode="numeric">
+                             pattern="\d{6}" title="Please enter exactly 6 digits" maxlength="6" inputmode="numeric">
                       <button type="submit" class="btn">Fix</button>
                     </form>
                     <form action="{{ url_for('delete_ballot',id=badge.id) }}" method="GET">
