@@ -13,6 +13,19 @@ celery = make_celery()
 bucket_name = 'techbloom-ballots'
 s3_client = boto3.client('s3')
 
+def is_junk_file(file_info):
+    filename = file_info.filename
+    basename = os.path.basename(filename)
+    return (
+        filename.startswith('__MACOSX/') or
+        '/__MACOSX/' in filename or
+        basename.startswith('._') or
+        basename.startswith('.') or
+        basename in ('Thumbs.db', 'desktop.ini') or
+        file_info.is_dir() or
+        not basename.strip()
+    )
+
 @celery.task(bind=True)
 def preprocess_zip_task(self, zip_key, session_id):
     print(f"[Celery] Got session_id: {session_id}")
@@ -21,13 +34,15 @@ def preprocess_zip_task(self, zip_key, session_id):
     model = get_model()
 
     try:
-        session_uuid = uuid.UUID(str((session_id)))
+        session_uuid = uuid.UUID(str(session_id))
         print(f"[Celery] Downloading ZIP from S3: {zip_key}")
         s3_object = s3_client.get_object(Bucket=bucket_name, Key=zip_key)
         zip_bytes = s3_object['Body'].read()
 
         with zipfile.ZipFile(BytesIO(zip_bytes), 'r') as archive:
             for file_info in archive.infolist():
+                if is_junk_file(file_info):
+                    continue
                 if not file_info.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
                     continue
 
