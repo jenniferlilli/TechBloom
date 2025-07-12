@@ -26,7 +26,6 @@ class Ballot(Base):
     name = Column(String)
     validity = Column(Boolean)
     created_at = Column(DateTime, server_default=func.current_timestamp())
-    votes = relationship("BallotVotes", backref="ballot", cascade="all, delete-orphan")
 
 class UploadedZip(Base):
     __tablename__ = 'uploaded_zips'
@@ -51,14 +50,13 @@ class BallotVotes(Base):
     __tablename__ = 'votes'
     id = Column(Integer, primary_key=True, autoincrement=True)
     badge_id = Column(String)
-    ballot_id = Column(Integer, ForeignKey('ballots.id', ondelete='CASCADE'), nullable=False)
+    ballot_id = Column(Integer, ForeignKey('ballots.id'), nullable=False)
     name = Column(String)
     category_id = Column(String)
     vote = Column(String)
     key = Column(String)
     vote_status = Column(String)
     is_valid = Column(Boolean)
-    
 
 class Product(Base):
     __tablename__ = 'products'
