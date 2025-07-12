@@ -603,6 +603,8 @@ def delete_ballot(id):
                 except Exception as e:
                     print(f"Error deleting vote image {vote.key} from S3: {e}")
             db_session.delete(vote)
+        
+        db_session.flush()
 
         db_session.delete(ballot)
 
